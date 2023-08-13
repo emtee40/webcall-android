@@ -319,6 +319,7 @@ public class WebCallService extends Service {
 	private static volatile boolean stopSelfFlag = false;
 	private static volatile boolean ringFlag = false;
 	private static volatile String textmode = "";
+	private static volatile String lastStatusMessage = "";
 
 	private volatile WebView myWebView = null;
 	private volatile WebCallJSInterface webCallJSInterface = new WebCallJSInterface();
@@ -380,6 +381,14 @@ public class WebCallService extends Service {
 					} else {
 						activityVisible = false;
 					}
+
+					// statusMessage() (runJS) is not always executed in doze mode
+					// here we display the lastStatusMessage again after wake from sleep
+					if(lastStatusMessage!="") {
+						runJS("showStatus('"+lastStatusMessage+"',-1);",null);
+						lastStatusMessage="";
+					}
+
 					return;
 				}
 
@@ -3122,7 +3131,10 @@ public class WebCallService extends Service {
 	private void calleeIsConnected() {
 		Log.d(TAG,"calleeIsConnected()");
 
-		updateNotification(awaitingCalls,false);
+		// problem: statusMessage() (runJS) is not always executed in doze mode
+		// we need a method to display the last msg when device gets out of doze
+		// see: lastStatusMessage
+		statusMessage(awaitingCalls,-1,true,false);
 
 		Intent brintent = new Intent("webcall");
 		brintent.putExtra("state", "connected");
@@ -4699,9 +4711,11 @@ public class WebCallService extends Service {
 	private void statusMessage(String msg, int timeoutMs, boolean notifi, boolean important) {
 		// webcall status msg + android notification (if notifi + important are true)
 		//Log.d(TAG,"statusMessage: "+msg+" n="+notifi+" i="+important);
+		lastStatusMessage = "";
 		if(myWebView!=null && webviewMainPageLoaded && msg!="") {
 			// msg MUST NOT contain apostrophe
 			String encodedMsg = msg.replace("'", "&#39;");
+			lastStatusMessage = encodedMsg;
 			runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");",null);
 		}
 		if(notifi) {
@@ -4716,7 +4730,7 @@ public class WebCallService extends Service {
 		} else if(stopSelfFlag) {
 			Log.d(TAG,"# updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
 		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) { // < 26
-			Log.d(TAG,"# updateNotification msg="+msg+" but sdk="+Build.VERSION.SDK_INT+" smaller than O (26)");
+			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than O (26)");
 //		} else if(!important) {
 //			Log.d(TAG,"# updateNotification msg="+msg+" but important not set");
 //		} else if(!isScreenOn()) {
