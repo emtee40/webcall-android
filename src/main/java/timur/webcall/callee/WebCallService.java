@@ -733,6 +733,7 @@ public class WebCallService extends Service {
 				@Override
 				public void onLost(Network network) {
 			        super.onLost(network);
+					haveNetworkInt = 0;
 					if(network!=null) {
 						Log.d(TAG,"networkCallback onLost "+network.toString()+" conWant="+connectToServerIsWanted);
 						// check the type of network lost...
@@ -741,7 +742,6 @@ public class WebCallService extends Service {
 							if(netInfo.getType() == ConnectivityManager.TYPE_WIFI) {  // TYPE_WIFI==1
 								Log.d(TAG,"networkCallback onLost wifi "+netInfo.getExtraInfo());
 								if(haveNetworkInt==2) {
-									haveNetworkInt = 0;		// TODO ???
 									if(connectToServerIsWanted) {
 										statusMessage("Wifi lost. Reconnect paused.",-1,true,false);
 									} else {
@@ -754,9 +754,6 @@ public class WebCallService extends Service {
 								}
 							} else {
 								Log.d(TAG,"networkCallback onLost other "+netInfo.getType()+" "+netInfo.getExtraInfo());
-								if(haveNetworkInt==1) {
-									haveNetworkInt = 0;		// TODO ???
-								}
 							}
 						} else {
 							Log.d(TAG,"# networkCallback onLost netInfo==null");
