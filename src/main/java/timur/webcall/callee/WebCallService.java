@@ -722,20 +722,19 @@ public class WebCallService extends Service {
 							//runJS("newPeerCon();",null);
 							//runJS("triggerOnIceCandidates();",null);
 						} else {
-							Log.d(TAG,"# networkCallback onAvailable netInfo==null "+network.toString());
+							Log.d(TAG,"# networkCallback onAvailable netInfo==null"));
 						}
 					} else {
 						Log.d(TAG,"# networkCallback onAvailable network==null");
 					}
 				}
 
-//tmtmtm: onLost() calls wifiLock.release() and clears haveNetworkInt
 				@Override
 				public void onLost(Network network) {
 			        super.onLost(network);
-					haveNetworkInt = 0;
+					haveNetworkInt = -1;
 					if(network!=null) {
-						Log.d(TAG,"networkCallback onLost "+network.toString()+" conWant="+connectToServerIsWanted);
+						Log.d(TAG,"networkCallback onLost conWant="+connectToServerIsWanted);
 						// check the type of network lost...
 						NetworkInfo netInfo = connectivityManager.getNetworkInfo(network);
 						if(netInfo != null) {
