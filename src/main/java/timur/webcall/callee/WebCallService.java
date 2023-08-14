@@ -4424,6 +4424,14 @@ public class WebCallService extends Service {
 			reconnectBusy = false;
 		}
 		statusMessage("Offline", -1, sendNotification,false);
+		lastStatusMessage = "";
+
+		// remove the Android notification
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+			// remove the forground-notification
+			Log.d(TAG,"disconnectHost stopForeground()");
+			stopForeground(true); // true = removeNotification
+		}
 
 		Intent brintent = new Intent("webcall");
 		brintent.putExtra("state", "disconnected");
