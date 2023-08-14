@@ -3792,7 +3792,9 @@ public class WebCallService extends Service {
 												playSoundAlarm();
 											}
 										}
-										keepAwakeWakeLock.release();
+										if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
+											keepAwakeWakeLock.release();
+										}
 									}
 								}
 							});
@@ -3993,7 +3995,9 @@ public class WebCallService extends Service {
 									Log.d(TAG,"reconnecter keepAwakeWakeLock.release 2 +"+wakeMS);
 									keepAwakeWakeLockMS += wakeMS;
 									storePrefsLong("keepAwakeWakeLockMS", keepAwakeWakeLockMS);
-									keepAwakeWakeLock.release();
+									if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
+										keepAwakeWakeLock.release();
+									}
 								}
 							}
 						});
