@@ -4472,9 +4472,7 @@ public class WebCallService extends Service {
 		} else if(!webviewMainPageLoaded && !str.equals("history.back()")) {
 			Log.d(TAG, "# runJS("+logstr+") but no webviewMainPageLoaded");
 		} else {
-//			if(extendedLogsFlag && !logstr.startsWith("wsOnError") && !logstr.startsWith("showStatus")) {
-				Log.d(TAG, "runJS("+logstr+") post...");
-//			}
+			Log.d(TAG, "runJS("+logstr+") post...");
 			myWebView.post(new Runnable() {
 				@Override
 				public void run() {
@@ -4487,7 +4485,7 @@ public class WebCallService extends Service {
 						Log.d(TAG,"# runJS evalJS "+str2+" but no webviewMainPageLoaded (and not history.back())");
 					} else {
 						// evaluateJavascript() instead of loadUrl()
-						Log.d(TAG,"runJS evalJS exec "+str2);
+						//Log.d(TAG,"runJS evalJS exec "+str2);
 						myWebView.evaluateJavascript(str2, myBlock);
 					}
 				}
