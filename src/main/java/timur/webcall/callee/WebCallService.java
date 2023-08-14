@@ -722,7 +722,7 @@ public class WebCallService extends Service {
 							//runJS("newPeerCon();",null);
 							//runJS("triggerOnIceCandidates();",null);
 						} else {
-							Log.d(TAG,"# networkCallback onAvailable netInfo==null"));
+							Log.d(TAG,"# networkCallback onAvailable netInfo==null");
 						}
 					} else {
 						Log.d(TAG,"# networkCallback onAvailable network==null");
