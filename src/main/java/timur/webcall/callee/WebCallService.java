@@ -320,6 +320,7 @@ public class WebCallService extends Service {
 	private static volatile boolean ringFlag = false;
 	private static volatile String textmode = "";
 	private static volatile String lastStatusMessage = "";
+	private static volatile Notification lastNotification = null;
 
 	private volatile WebView myWebView = null;
 	private volatile WebCallJSInterface webCallJSInterface = new WebCallJSInterface();
@@ -335,6 +336,7 @@ public class WebCallService extends Service {
 		context = this;
 		prefs = PreferenceManager.getDefaultSharedPreferences(context);
 		mBinder = new WebCallServiceBinder();
+		Log.d(TAG,"onBind return mBinder");
 		return mBinder;
 	}
 
@@ -348,6 +350,7 @@ public class WebCallService extends Service {
 	public void onCreate() {
 		Log.d(TAG,"onCreate "+BuildConfig.VERSION_NAME+" "+Build.VERSION.SDK_INT);
 		stopSelfFlag = false;
+
 		alarmReceiver = new AlarmReceiver();
 		registerReceiver(alarmReceiver, new IntentFilter(startAlarmString));
 
@@ -497,7 +500,7 @@ public class WebCallService extends Service {
 	}
 
 	@Override
-	public int onStartCommand(Intent intent, int flags, int startId) {
+	public int onStartCommand(Intent onStartIntent, int flags, int startId) {
 		Log.d(TAG,"onStartCommand");
 		context = this;
 
@@ -1082,14 +1085,17 @@ public class WebCallService extends Service {
 			//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else if(reconnectBusy) {
 			Log.d(TAG,"onStartCommand got reconnectBusy");
+			// TODO not sure about this
 			storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else {
+/*
+// TODO delete code: this was moved to connectHost() (on success)
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 				// create notificationChannel to start service in foreground
 				Log.d(TAG,"onStartCommand startForeground");
 				startForeground(NOTIF_ID,buildFgServiceNotification("","",false));
 			}
-
+*/
 			String webcalldomain = null;
 			String username = null;
 			try {
@@ -1115,8 +1121,8 @@ public class WebCallService extends Service {
 				setLoginUrl();
 				Log.d(TAG,"onStartCommand loginUrl="+loginUrl);
 				boolean autoCalleeConnect = false;
-				if(intent==null) {
-					Log.d(TAG,"onStartCommand intent==null");
+				if(onStartIntent==null) {
+					Log.d(TAG,"onStartCommand onStartIntent==null");
 					// service restart after crash
 					// autoCalleeConnect to webcall server if extraCommand.equals("connect")
 					try {
@@ -1129,9 +1135,9 @@ public class WebCallService extends Service {
 						Log.d(TAG,"onStartCommand connectWanted ex="+ex);
 					}
 				} else {
-					Log.d(TAG,"onStartCommand intent!=null");
+					Log.d(TAG,"onStartCommand onStartIntent!=null");
 					// let's see if service was started by boot...
-					Bundle extras = intent.getExtras();
+					Bundle extras = onStartIntent.getExtras();
 					if(extras==null) {
 						Log.d(TAG,"onStartCommand extras==null");
 						storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
@@ -1141,12 +1147,12 @@ public class WebCallService extends Service {
 							Log.d(TAG,"onStartCommand extraCommand==null");
 							storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 						} else {
+							// service was started by boot (by WebCallServiceReceiver.java)
 							if(!extraCommand.equals("") && !extraCommand.equals("donothing")) {
 								Log.d(TAG,"onStartCommand extraCommand="+extraCommand);
 							}
 							if(extraCommand.equals("connect")) {
-								// service was started by boot (by WebCallServiceReceiver.java)
-								// auto-connect (login) to webcall server
+								// auto-connect (login) to webcall server is requested
 								autoCalleeConnect = true;
 							}
 						}
@@ -1155,10 +1161,12 @@ public class WebCallService extends Service {
 
 				if(!autoCalleeConnect) {
 					Log.d(TAG,"onStartCommand no autoCalleeConnect");
+					connectToServerIsWanted = false;
 					storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 					// autoCalleeConnect is only being used on boot and for restart of a crashed service
 					// in all other cases the connection will be triggered by the activity
 				} else {
+					// this is like the user clicking goOnline
 					if(reconnectBusy) {
 						Log.d(TAG,"onStartCommand autoCalleeConnect but reconnectBusy");
 					} else {
@@ -2149,23 +2157,27 @@ public class WebCallService extends Service {
 		public void wsClose() {
 			// called by JS:goOffline()
 			Log.d(TAG,"JS wsClose");
-			calleeIsReady = false;
 			connectToServerIsWanted = false;
 			storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
+
+/* done by disconnectHost()
+			calleeIsReady = false;
 			if(pendingAlarm!=null) {
 				alarmManager.cancel(pendingAlarm);
 				pendingAlarm = null;
 				alarmPendingDate = null;
 			}
+
 			// if reconnect loop is running, cancel it
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 				Log.d(TAG,"JS wsClose cancel reconnectSchedFuture");
-				reconnectSchedFuture.cancel(false);	
+				reconnectSchedFuture.cancel(false);
 				reconnectSchedFuture = null;
 				statusMessage("Stopped reconnecting",-1,true,false); // manually
 			}
 			// this is needed for wakelock and wifilock to be released
 			reconnectBusy = false;
+*/
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true);
 			Log.d(TAG,"JS wsClose done");
@@ -2352,12 +2364,13 @@ public class WebCallService extends Service {
 		@android.webkit.JavascriptInterface
 		public void wsExit() {
 			// called by Exit button
+/* done by disconnectHost()
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 				reconnectSchedFuture.cancel(false);
 				reconnectSchedFuture = null;
 			}
 			reconnectBusy = false;
-
+*/
 			// hangup peercon, clear callPickedUpFlag, reset webview
 			endPeerConAndWebView();
 
@@ -2955,7 +2968,6 @@ public class WebCallService extends Service {
 			if(intent.getAction().equals(Intent.ACTION_POWER_CONNECTED)) {
 				Log.d(TAG,"POWER_CONNECTED");
 				charging = true;
-
 			} else if(intent.getAction().equals(Intent.ACTION_POWER_DISCONNECTED)) {
 				Log.d(TAG,"POWER_DISCONNECTED");
 				charging = false;
@@ -2967,6 +2979,7 @@ public class WebCallService extends Service {
 				Log.d(TAG, "power event wsClient is set: checkLastPing");
 				checkLastPing(true,0);
 			} else {
+				// we are disconnected: if connectToServerIsWanted, connect to server
 				if(!connectToServerIsWanted) {
 					Log.d(TAG,"power event wsClient not set, no connectToServerIsWanted");
 				} else if(reconnectBusy) {
@@ -3134,7 +3147,7 @@ public class WebCallService extends Service {
 			mediaPlayer.stop();
 			mediaPlayer = null;
 		} else {
-			Log.d(TAG,"stopRinging (was not active), from "+comment);
+			//Log.d(TAG,"stopRinging (was not active), from "+comment);
 		}
 	}
 
@@ -4215,6 +4228,12 @@ public class WebCallService extends Service {
 					// then we will send: updateNotification awaitingCalls
 					// then we will broadcast: "state", "connected"
 
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+						// create notificationChannel to start service in foreground
+						Log.d(TAG,"onStartCommand startForeground");
+						startForeground(NOTIF_ID,buildFgServiceNotification("","",false));
+					}
+
 					return wsClient;
 				}
 			}
@@ -4416,6 +4435,23 @@ public class WebCallService extends Service {
 	}
 
 	private void disconnectHost(boolean sendNotification) {
+		// called by wsClose() and wsExit()
+		Log.d(TAG,"disconnectHost...");
+		calleeIsReady = false;
+		if(pendingAlarm!=null) {
+			alarmManager.cancel(pendingAlarm);
+			pendingAlarm = null;
+			alarmPendingDate = null;
+		}
+
+		// if reconnect loop is running, cancel it
+		if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+			Log.d(TAG,"disconnectHost reconnectSchedFuture.cancel");
+			reconnectSchedFuture.cancel(false);
+			reconnectSchedFuture = null;
+			statusMessage("Stopped reconnecting",-1,true,false); // manually
+		}
+
 		if(wsClient!=null) {
 			// disable networkStateReceiver
 			if(networkStateReceiver!=null) {
@@ -4430,37 +4466,47 @@ public class WebCallService extends Service {
 				Log.d(TAG,"disconnectHost wsClient.closeBlocking");
 				tmpWsClient.closeBlocking();
 			} catch(InterruptedException ex) {
-				Log.e(TAG,"disconnectHost InterruptedException",ex);
+				Log.e(TAG,"# disconnectHost InterruptedException",ex);
 			}
-			if(!reconnectBusy) {
-				if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
-					long wakeMS = (new Date()).getTime() - keepAwakeWakeLockStartTime;
-					Log.d(TAG,"disconnectHost keepAwakeWakeLock.release +"+wakeMS);
-					keepAwakeWakeLockMS += wakeMS;
-					storePrefsLong("keepAwakeWakeLockMS", keepAwakeWakeLockMS);
-					keepAwakeWakeLock.release();
-				}
-				if(wifiLock!=null && wifiLock.isHeld()) {
-					// release wifi lock
-					Log.d(TAG,"disconnectHost wifiLock.release");
-					wifiLock.release();
-				}
-			}
-			reconnectBusy = false;
 		}
-		statusMessage("Offline", -1, sendNotification,false);
-		lastStatusMessage = "";
 
-		// remove the Android notification
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-			// remove the forground-notification
-			Log.d(TAG,"disconnectHost stopForeground()");
-			stopForeground(true); // true = removeNotification
+		// this is needed for wakelock and wifilock to be released
+		reconnectBusy = false;
+		if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
+			long wakeMS = (new Date()).getTime() - keepAwakeWakeLockStartTime;
+			Log.d(TAG,"disconnectHost keepAwakeWakeLock.release +"+wakeMS);
+			keepAwakeWakeLockMS += wakeMS;
+			storePrefsLong("keepAwakeWakeLockMS", keepAwakeWakeLockMS);
+			keepAwakeWakeLock.release();
+		}
+		if(wifiLock!=null && wifiLock.isHeld()) {
+			// release wifi lock
+			Log.d(TAG,"disconnectHost wifiLock.release");
+			wifiLock.release();
 		}
 
 		Intent brintent = new Intent("webcall");
 		brintent.putExtra("state", "disconnected");
 		sendBroadcast(brintent);
+
+		statusMessage("Offline", -1, sendNotification,false);
+		lastStatusMessage = "";
+
+// TODO tmtmtm: should any of these unregister methods (see onDestroy()) need to be called?
+//		alarmReceiver serviceCmdReceiver networkStateReceiver
+//      powerConnectionReceiver dozeStateReceiver myNetworkCallback mBinder
+
+		// remove the Android notification
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+			Log.d(TAG,"disconnectHost stopForeground()");
+			stopForeground(true); // true = removeNotification
+
+			// without notificationManager.cancel(NOTIF_ID) our notification icon will not go
+			Log.d(TAG,"disconnectHost notificationManager.cancel(NOTIF_ID)");
+			NotificationManager notificationManager =
+				(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+			notificationManager.cancel(NOTIF_ID);
+		}
 
 		Log.d(TAG,"disconnectHost done");
 	}
@@ -4763,7 +4809,7 @@ public class WebCallService extends Service {
 
 		}
 
-		if(notifi) {
+		if(notifi && connectToServerIsWanted) {
 			updateNotification(msg, important);
 		}
 	}
@@ -4777,11 +4823,11 @@ public class WebCallService extends Service {
 		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) { // < 26
 			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than O (26)");
 		} else {
-			Log.d(TAG,"updateNotification msg="+msg+" important="+important);
+//			Log.d(TAG,"updateNotification msg="+msg+" important="+important);
 			NotificationManager notificationManager =
 				(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
 			String title = "";
-			Notification notification = buildFgServiceNotification(title, msg, important);
+			lastNotification = buildFgServiceNotification(title, msg, important);
 			/*
 			if(msg.equals("Incoming WebCall")) {
 				Log.d(TAG,"updateNotification 'Incoming WebCall' setLights");
@@ -4791,7 +4837,7 @@ public class WebCallService extends Service {
 				notification.ledOffMS = 300;
 			}
 			*/
-			notificationManager.notify(NOTIF_ID, notification);
+			notificationManager.notify(NOTIF_ID, lastNotification);
 		}
 	}
 
@@ -4811,6 +4857,7 @@ public class WebCallService extends Service {
 				msg = "Offline";
 			}
 
+			Log.d(TAG,"buildFgServiceNotification title="+title+" msg="+msg+" !="+important);
 			NotificationCompat.Builder notificationBuilder =
 				new NotificationCompat.Builder(this, notifChannel)
 						.setContentTitle(title) // 1st line showing in top-bar
