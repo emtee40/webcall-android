@@ -1,0 +1,8 @@
+WebCall for Android
+Release notes v1.4.0:
+- custom callee ID's
+- reliable Wifi/Mobile handover
+- connectivity robustness
+- user interface improvements
+- many bugfixes
+
