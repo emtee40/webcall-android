@@ -115,11 +115,11 @@ function domainAction() {
 	// https://stackoverflow.com/questions/4460586/javascript-regular-expression-to-check-for-ip-addresses
 	if(valueDomainWithoutPort.split(".").map(ip => Number(ip) >= 0 && Number(ip) <= 255).includes(false)) {
 		// not a valid ip-address
-		console.log("domainAction: not an ip-address: "+valueDomainWithoutPort);
+		console.log("domainAction: no ip-address: "+valueDomainWithoutPort+" insecureTls off");
 		insecureTls.checked = false;
 	} else {
 		// a valid ip-address
-		console.log("domainAction: is a valid ip-address: "+valueDomainWithoutPort);
+		console.log("domainAction: is valid ip-address: "+valueDomainWithoutPort+" insecureTls on");
 		insecureTls.checked = true;
 	}
 	insecureTlsAction();
