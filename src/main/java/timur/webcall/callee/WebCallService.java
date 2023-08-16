@@ -743,27 +743,42 @@ public class WebCallService extends Service {
 						if(netInfo != null) {
 							if(netInfo.getType() == ConnectivityManager.TYPE_WIFI) {  // TYPE_WIFI==1
 								Log.d(TAG,"networkCallback onLost wifi "+netInfo.getExtraInfo());
-								if(haveNetworkInt==2) {
-									if(connectToServerIsWanted) {
-										statusMessage("Wifi lost. Reconnect paused.",-1,true,false);
-									} else {
-										//statusMessage("Wifi lost.",-1,true,false);
-									}
-								}
-								if(wifiLock!=null && wifiLock.isHeld()) {
-									Log.d(TAG,"networkCallback onLost wifi wifiLock.release");
-									wifiLock.release();
-								}
+								statusMessage("Wifi lost",-1,true,false);
 							} else {
 								Log.d(TAG,"networkCallback onLost other "+netInfo.getType()+" "+netInfo.getExtraInfo());
+								statusMessage("Network lost",-1,true,false);
 							}
 						} else {
-							Log.d(TAG,"# networkCallback onLost netInfo==null");
-							// we will release wifi.lock on onCapabilitiesChanged()
+							Log.d(TAG,"networkCallback onLost netInfo==null");
+							if(haveNetworkInt==2) {
+								statusMessage("Wifi lost",-1,true,false);
+							} else {
+								statusMessage("Network lost",-1,true,false);
+							}
 						}
 					} else {
-						Log.d(TAG,"# networkCallback onLost network==null");
+						Log.d(TAG,"networkCallback onLost netInfo==null");
+						if(haveNetworkInt==2) {
+							statusMessage("Wifi lost",-1,true,false);
+						} else {
+							statusMessage("Network lost",-1,true,false);
+						}
 					}
+					if(wifiLock!=null && wifiLock.isHeld()) {
+						Log.d(TAG,"networkCallback onLost wifiLock.release");
+						wifiLock.release();
+					}
+					haveNetworkInt = 0;
+					// note: onCapabilitiesChanged will not be called (on SDK <= 25)
+
+					// if connected, do disconnect
+					if(wsClient!=null) {
+						// note: this may cause: onClose code=1000
+						Log.d(TAG,"networkCallback onLost close old connection");
+						wsClient.close();
+						wsClient = null;
+					}
+					// note: reconnector will be automatically re-started when some network returns
 				}
 
 				@Override
@@ -863,26 +878,26 @@ public class WebCallService extends Service {
 							} else {
 								statusMessage("Reconnect other...",-1,true,false);
 							}
+							if(wsClient!=null) {
+								// disconnect old connection to avoid server re-login denial ("already/still logged in")
+								// note: this will cause: onClose code=1000
+								Log.d(TAG,"networkCallback disconnect old connection");
+								wsClient.close();
+								wsClient = null;
+							}
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 								// why wait for the scheduled reconnecter job
 								// let's cancel it and start in 3s from now
 								// (so that the server has enough time to detect the disconnect)
 								Log.d(TAG,"networkCallback cancel reconnectSchedFuture");
 								if(reconnectSchedFuture.cancel(false)) {
-									// now run reconnecter in the next second
+									// next run reconnecter
 									Log.d(TAG,"networkCallback restart reconnecter in 3s");
 									reconnectSchedFuture = scheduler.schedule(reconnecter, 3 ,TimeUnit.SECONDS);
 								}
 							} else {
 								Log.d(TAG,"networkCallback start reconnecter in 3s");
 								reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
-							}
-							if(wsClient!=null) {
-								// disconnect old connection to avoid server re-login denial ("already/still logged in")
-								// note: this will cause: onClose code=1000
-								Log.d(TAG,"disconnect old connection");
-								wsClient.close();
-								wsClient = null;
 							}
 						} else {
 							Log.d(TAG,"networkCallback no reconnecter: reconnectBusy="+reconnectBusy);
@@ -2560,7 +2575,13 @@ public class WebCallService extends Service {
 					// disable offline-button and enable online-button
 					// TODO etwas stimmt aber nicht:
 					// connectToServerIsWanted wird hier noch nicht gelöscht, später kommt noch ein alarm + reconnect
-					runJS("wsOnClose2();",null);
+//					runJS("wsOnClose2();",null);
+					runJS("wsOnClose2();", new ValueCallback<String>() {
+						@Override
+						public void onReceiveValue(String s) {
+							Log.d(TAG,"runJS('wsOnClose2') completed: "+s);
+						}
+					});
 				}
 			} else {
 				Log.d(TAG,"onClose code="+code+" reason="+reason);
@@ -4796,7 +4817,7 @@ public class WebCallService extends Service {
 		} else if(msg=="") {
 			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip msg empty");
 		} else {
-			// msg MUST NOT contain apostrophe
+			// encodedMsg MUST NOT contain apostrophe
 			String encodedMsg = msg.replace("'", "&#39;");
 			lastStatusMessage = encodedMsg;
 			//runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");",null);
@@ -4806,7 +4827,6 @@ public class WebCallService extends Service {
 					Log.d(TAG,"statusMessage completed: "+encodedMsg);
 				}
 			});
-
 		}
 
 		if(notifi && connectToServerIsWanted) {
