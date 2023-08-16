@@ -3764,7 +3764,6 @@ public class WebCallService extends Service {
 							statusMessage("Failed to reconnect. Will try again...",-1,true,prio);
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 								Log.d(TAG,"cancel old schedFuture");
-								statusMessage("Failed to reconnect. Will try again... ()",-1,true,prio);
 								reconnectSchedFuture.cancel(false);
 								reconnectSchedFuture = null;
 							} else {
