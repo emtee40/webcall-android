@@ -226,6 +226,7 @@ function connectServer() {
 		return;
 	}
 
+/*
 	let isNetwork = Android.isNetwork();
 	console.log('isNetwork='+isNetwork);
 	if(!isNetwork) {
@@ -235,6 +236,7 @@ function connectServer() {
 		setTimeout(function() { document.activeElement.blur(); },100); // deactivate button
 		return;
 	}
+*/
 
 	var abort = false;
 	if(divspinnerframe) {
