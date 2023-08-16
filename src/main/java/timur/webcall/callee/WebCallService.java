@@ -178,7 +178,7 @@ public class WebCallService extends Service {
 	private final static String NOTIF_CHANNEL_ID_HIGH = "124";
 	private final static String startAlarmString = "timur.webcall.callee.START_ALARM"; // for alarmReceiver
 	private final static Intent startAlarmIntent = new Intent(startAlarmString);
-	private final static String awaitingCalls = "Awaiting calls";
+	private final static String awaitingCalls = "Ready to receive calls";
 
 	// serverPingPeriodPlus corresponds to pingPeriod=60 in wsClient.go
 	// after serverPingPeriodPlus secs with no pings, checkLastPing() considers server connection gone
@@ -683,7 +683,7 @@ public class WebCallService extends Service {
 			Log.d(TAG,"onStartCommand versionName ex="+ex);
 		}
 
-/*
+		/*
 		final NetworkRequest requestForCellular =
 			new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR).build();
 		final NetworkRequest requestForWifi =
@@ -692,12 +692,12 @@ public class WebCallService extends Service {
 			new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET).build();
 		final NetworkRequest requestForUSB =
 			new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_USB).build();
-*/
+		*/
 		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // >=api24
 			// networkCallback code fully replaces checkNetworkState()
 			myNetworkCallback = new ConnectivityManager.NetworkCallback() {
 
-//tmtmtm: onAvailable() is doing nothing currently
+				//TODO: onAvailable() is doing nothing currently
 				@Override
 				public void onAvailable(Network network) {
 					super.onAvailable(network);
@@ -897,7 +897,7 @@ public class WebCallService extends Service {
 
 			Log.d(TAG, "networkCallback init registerDefaultNetworkCallback");
 			connectivityManager.registerDefaultNetworkCallback(myNetworkCallback);
-/*
+			/*
 			Log.d(TAG, "networkCallback init requestForCellular");
 			connectivityManager.requestNetwork(requestForCellular, myNetworkCallback);
 
@@ -909,7 +909,7 @@ public class WebCallService extends Service {
 
 			Log.d(TAG, "networkCallback init requestForUSB");
 			connectivityManager.requestNetwork(requestForUSB, myNetworkCallback);
-*/
+			*/
 		} else {
 			// SDK_INT < Build.VERSION_CODES.N) // <api24
 			checkNetworkState(false);
@@ -2619,8 +2619,8 @@ public class WebCallService extends Service {
 						setLoginUrl();
 						if(loginUrl!="") {
 							Log.d(TAG,"onClose re-login in 5s url="+loginUrl);
-							// TODO on P9 in some cases this reconnecter does NOT come
-							// these are cases where the cause of the 1006 was wifi being gone (client side)
+							// TODO on P9 in some cases this reconnecter does NOT fire
+							// these are cases where the cause of the 1006 was wifi lost (client side)
 							// shortly after this 1006 we then receive a networkStateReceiver event with all null
 							reconnectSchedFuture = scheduler.schedule(reconnecter,5,TimeUnit.SECONDS);
 						}
@@ -3034,10 +3034,24 @@ public class WebCallService extends Service {
 				checkLastPing(true,0);
 			} else {
 				if(!connectToServerIsWanted) {
-					Log.d(TAG,"alarm no connectToServerIsWanted");
+					Log.d(TAG,"alarm skip, no connectToServerIsWanted");
+				/*
 				} else if(reconnectBusy) {
-					Log.d(TAG,"alarm reconnectBusy");
+					// alarm only fires if device is in doze, and then reconnectSchedFuture does NOT fire
+					// so we do NOT skip this alarm!
+					// instead we canncel reconnectSchedFuture (if it is not done)
+					// and startReconnecter
+					Log.d(TAG,"alarm skip, reconnectBusy");
+				*/
 				} else {
+					// stop reconnectSchedFuture, clear reconnectBusy
+					if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+						Log.d(TAG,"alarm reconnectSchedFuture.cancel");
+						reconnectSchedFuture.cancel(false);
+						reconnectSchedFuture = null;
+					}
+					reconnectBusy = false;
+
 					Log.d(TAG,"alarm startReconnecter");
 					startReconnecter(true,0);
 				}
@@ -3184,6 +3198,7 @@ public class WebCallService extends Service {
 
 		setLoginUrl();
 		if(!reconnectBusy) {
+// tmtmtm
 			// TODO do we need to copy cookies here?
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 				reconnectSchedFuture.cancel(false);
@@ -3467,10 +3482,12 @@ public class WebCallService extends Service {
 		reconnecter = new Runnable() {
 			public void run() {
 				if(!connectToServerIsWanted) {
+					Log.d(TAG,"! reconnecter start, not wanted "+reconnectCounter+" net="+haveNetworkInt+" "+
+						currentDateTimeString());
 					return;
 				}
 
-/*
+				/*
 				reconnectSchedFuture = null;
 				if(wsClient!=null) {
 					Log.d(TAG,"reconnecter already connected");
@@ -3482,7 +3499,7 @@ public class WebCallService extends Service {
 					reconnectBusy = false;
 					return;
 				}
-*/
+				*/
 				reconnectBusy = true;
 				Log.d(TAG,"reconnecter start "+reconnectCounter+" net="+haveNetworkInt+" "+
 					currentDateTimeString());
@@ -3711,13 +3728,21 @@ public class WebCallService extends Service {
 								prio = true;
 							}
 							statusMessage("Failed to reconnect. Will try again...",-1,true,prio);
-
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+								Log.d(TAG,"cancel old schedFuture");
+								statusMessage("Failed to reconnect. Will try again... ()",-1,true,prio);
 								reconnectSchedFuture.cancel(false);
 								reconnectSchedFuture = null;
+							} else {
+								Log.d(TAG,"no old schedFuture to cancel");
 							}
 							reconnectSchedFuture =
 								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+							if(reconnectSchedFuture==null) {
+								Log.d(TAG,"scheduled reconnect in "+delaySecs+"sec reconnectSchedFuture==null");
+							} else {
+								Log.d(TAG,"scheduled reconnect in "+delaySecs+"sec done="+reconnectSchedFuture.isDone());
+							}
 							return;
 						}
 						Log.d(TAG,"reconnecter con.connect() fail. give up.");
@@ -4718,12 +4743,26 @@ public class WebCallService extends Service {
 		// webcall status msg + android notification (if notifi + important are true)
 		//Log.d(TAG,"statusMessage: "+msg+" n="+notifi+" i="+important);
 		lastStatusMessage = "";
-		if(myWebView!=null && webviewMainPageLoaded && msg!="") {
+		if(myWebView==null) {
+			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip no webview");
+		} else if(!webviewMainPageLoaded) {
+			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip notOnMainPage");
+		} else if(msg=="") {
+			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip msg empty");
+		} else {
 			// msg MUST NOT contain apostrophe
 			String encodedMsg = msg.replace("'", "&#39;");
 			lastStatusMessage = encodedMsg;
-			runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");",null);
+			//runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");",null);
+			runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");", new ValueCallback<String>() {
+				@Override
+				public void onReceiveValue(String s) {
+					Log.d(TAG,"statusMessage completed: "+encodedMsg);
+				}
+			});
+
 		}
+
 		if(notifi) {
 			updateNotification(msg, important);
 		}
@@ -4737,10 +4776,6 @@ public class WebCallService extends Service {
 			Log.d(TAG,"# updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
 		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) { // < 26
 			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than O (26)");
-//		} else if(!important) {
-//			Log.d(TAG,"# updateNotification msg="+msg+" but important not set");
-//		} else if(!isScreenOn()) {
-//			Log.d(TAG,"# updateNotification msg="+msg+" but screen is off");
 		} else {
 			Log.d(TAG,"updateNotification msg="+msg+" important="+important);
 			NotificationManager notificationManager =
