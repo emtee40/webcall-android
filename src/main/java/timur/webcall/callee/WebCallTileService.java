@@ -152,6 +152,8 @@ public class WebCallTileService extends TileService {
 		super.onStopListening();
 		Log.d(TAG,"onStopListening");
 		tilesVisible = false;
+		Log.d(TAG,"onStopListening requestListeningState...");
+		requestListeningState(this, new ComponentName(this, WebCallTileService.class));
 	}
 
 	// Called when the user taps on your tile in an active or inactive state.

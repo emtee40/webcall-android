@@ -4921,7 +4921,7 @@ public class WebCallService extends Service {
 			Log.d(TAG,"# updateNotification msg empty");
 		} else if(stopSelfFlag) {
 			Log.d(TAG,"# updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
-		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.K) { // < 19
+		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) { // < 19
 			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than K (19)");
 		} else {
 			NotificationManager notificationManager =
