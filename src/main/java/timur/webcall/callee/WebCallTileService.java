@@ -26,7 +26,7 @@ public class WebCallTileService extends TileService {
 	private static ScheduledExecutorService scheduler = null;
 	private static volatile boolean waitingForScheduler = false;
 	private static volatile boolean unbindServiceDenied = false;
-//	private static volatile boolean tilesVisible = false;
+	private static volatile boolean tilesVisible = false;
 	private static volatile int getStateLoopCounter = 0;
 
 	private static BroadcastReceiver broadcastReceiver = null;
@@ -48,6 +48,7 @@ public class WebCallTileService extends TileService {
 	@Override
 	public IBinder onBind(Intent intent) {
 		Log.d(TAG,"onBind intent="+intent.toString());
+		Context context = this;
 
 		if(scheduler==null) {
 			Log.d(TAG,"onBind Executors.newScheduledThreadPool(20)");
@@ -55,33 +56,43 @@ public class WebCallTileService extends TileService {
 		}
 
 		// to receive (pending-)intent msgs from the service
-		broadcastReceiver = new BroadcastReceiver() {
-			@Override
-			public void onReceive(Context context, Intent intent) {
-				String state = intent.getStringExtra("state");
-				if(state!=null && !state.equals("")) {
-					if(state.equals("connected")) {
-						// user is now connected as callee to webcall server
-						Log.d(TAG, "broadcastReceiver wsCon state="+state);
-						updateTile(true);
-					} else if(state.equals("disconnected")) {
-						Log.d(TAG, "broadcastReceiver wsCon state="+state);
-						// "temporary disconnect" must NOT set button off
-						//updateTile(false);
-					} else if(state.equals("deactivated")) {
-						// "server giving up reconnecting" must set button off
-						Log.d(TAG, "broadcastReceiver wsCon state="+state);
-						updateTile(false);
-					} else {
-						//Log.d(TAG, "! broadcastReceiver unexpected state="+state);
+		if(broadcastReceiver==null) {
+			broadcastReceiver = new BroadcastReceiver() {
+				@Override
+				public void onReceive(Context context, Intent intent) {
+					String state = intent.getStringExtra("state");
+					if(state!=null && !state.equals("")) {
+						if(state.equals("connected")) {
+							// user is now connected as callee to webcall server
+							Log.d(TAG, "broadcastReceiver wsCon state="+state);
+							if(!tilesVisible) {
+								Log.d(TAG, "broadcastReceiver requestListeningState");
+								requestListeningState(context, new ComponentName(context, WebCallTileService.class));
+							}
+							updateTile(true);
+						} else if(state.equals("disconnected")) {
+							Log.d(TAG, "broadcastReceiver wsCon state="+state);
+							// "temporary disconnect" must NOT set button off
+							//updateTile(false);
+						} else if(state.equals("deactivated")) {
+							// "server giving up reconnecting" must set button off
+							Log.d(TAG, "broadcastReceiver wsCon state="+state);
+							if(!tilesVisible) {
+								Log.d(TAG, "broadcastReceiver requestListeningState");
+								requestListeningState(context, new ComponentName(context, WebCallTileService.class));
+							}
+							updateTile(false);
+						} else {
+							//Log.d(TAG, "! broadcastReceiver unexpected state="+state);
+						}
+						return;
 					}
-					return;
-				}
 
-				Log.d(TAG, "# broadcastReceiver unknown cmd");
-			}
-		};
-		registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
+					Log.d(TAG, "! broadcastReceiver unknown cmd");
+				}
+			};
+			registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
+		}
 
 		if(webCallServiceBinder==null) {
 			Intent serviceIntent = new Intent(this, WebCallService.class);
@@ -108,7 +119,7 @@ public class WebCallTileService extends TileService {
 
 		// active tiles may request to send an update to the System while their process is alive
 		Log.d(TAG,"onBind requestListeningState");
-		requestListeningState(this, new ComponentName(this, WebCallTileService.class));
+		requestListeningState(context, new ComponentName(context, WebCallTileService.class));
 	    return super.onBind(intent);
 	}
 
@@ -116,9 +127,8 @@ public class WebCallTileService extends TileService {
 	public void onDestroy() {
 		if(webCallServiceBinder!=null) {
 			Log.d(TAG,"onDestroy unbindService");
-			webCallServiceBinder = null;
 			unbindService(serviceConnection);
-
+			webCallServiceBinder = null;
 		}
 		if(broadcastReceiver!=null) {
 			Log.d(TAG, "onDestroy unregister broadcastReceiver");
@@ -133,7 +143,7 @@ public class WebCallTileService extends TileService {
 	public void onStartListening() {
 		super.onStartListening();
 		Log.d(TAG,"onStartListening");
-//		tilesVisible = true;
+		tilesVisible = true;
 	}
 
 	// Called when this tile moves out of the listening state.
@@ -141,7 +151,7 @@ public class WebCallTileService extends TileService {
 	public void onStopListening() {
 		super.onStopListening();
 		Log.d(TAG,"onStopListening");
-//		tilesVisible = false;
+		tilesVisible = false;
 	}
 
 	// Called when the user taps on your tile in an active or inactive state.
@@ -217,16 +227,12 @@ public class WebCallTileService extends TileService {
 					getString(R.string.service_inactive));
 		}
 
-//		if(tilesVisible) {
-			Log.d(TAG,"updateTile isActive="+isActive+" "+newLabel);
-			tile.setLabel(newLabel);
-			tile.setState(newState);
+		Log.d(TAG,"updateTile isActive="+isActive+" "+newLabel);
+		tile.setLabel(newLabel);
+		tile.setState(newState);
 
-			// let the tile to pick up changes
-			tile.updateTile();
-//		} else {
-//			Log.d(TAG,"! updateTile tiles not visible isActive="+isActive+" "+newLabel);
-//		}
+		// let the tile to pick up changes
+		tile.updateTile();
 	}
 
 	private ServiceConnection serviceConnection = new ServiceConnection() {

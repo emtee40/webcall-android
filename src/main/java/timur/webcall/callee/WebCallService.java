@@ -588,7 +588,7 @@ public class WebCallService extends Service {
 				msg = awaitingCalls;
 			}
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
-			startForeground(NOTIF_ID,buildFgServiceNotification("",msg,false));
+			startForeground(NOTIF_ID,buildServiceNotification("",msg,false));
 		}
 
 		if(loginUrl!=null && scheduler!=null) {
@@ -862,7 +862,12 @@ public class WebCallService extends Service {
 						wifiLock.release();
 					}
 					haveNetworkInt = 0;
-					// note: onCapabilitiesChanged will not be called (on SDK <= 25)
+
+					// onCapabilitiesChanged will not be called (on SDK <= 25)
+					if(Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+						// nothing to do; waiting for network to come back to start reconnector
+						// who sets connectToServerIsWanted=false ?
+					}
 
 					// if connected, do disconnect
 					if(wsClient!=null) {
@@ -1201,7 +1206,7 @@ public class WebCallService extends Service {
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 				// create notificationChannel to start service in foreground
 				Log.d(TAG,"onStartCommand startForeground");
-				startForeground(NOTIF_ID,buildFgServiceNotification("","",false));
+				startForeground(NOTIF_ID,buildServiceNotification("","",false));
 			}
 */
 			String webcalldomain = null;
@@ -4313,7 +4318,7 @@ public class WebCallService extends Service {
 					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 						// create notificationChannel to start service in foreground
 						Log.d(TAG,"onStartCommand startForeground");
-						startForeground(NOTIF_ID,buildFgServiceNotification("","",false));
+						startForeground(NOTIF_ID,buildServiceNotification("","",false));
 					}
 */
 					return wsClient;
@@ -4916,13 +4921,13 @@ public class WebCallService extends Service {
 			Log.d(TAG,"# updateNotification msg empty");
 		} else if(stopSelfFlag) {
 			Log.d(TAG,"# updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
-		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) { // < 26
-			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than O (26)");
+		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.K) { // < 19
+			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than K (19)");
 		} else {
 			NotificationManager notificationManager =
 				(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
 			String title = "";
-			lastNotification = buildFgServiceNotification(title, msg, important);
+			lastNotification = buildServiceNotification(title, msg, important);
 			/*
 			if(msg.equals("Incoming WebCall")) {
 				Log.d(TAG,"updateNotification 'Incoming WebCall' setLights");
@@ -4938,7 +4943,7 @@ public class WebCallService extends Service {
 		}
 	}
 
-	private Notification buildFgServiceNotification(String title, String msg, boolean important) {
+	private Notification buildServiceNotification(String title, String msg, boolean important) {
 		// only call with Build.VERSION.SDK_INT >= Build.VERSION_CODES.O // >= 26
 		String notifChannel = NOTIF_CHANNEL_ID_LOW;
 		if(important) {
@@ -4950,11 +4955,8 @@ public class WebCallService extends Service {
 		if(title.equals("")) {
 			title = "WebCall";
 		}
-//		if(msg.equals("")) {
-//			msg = lastStatusMessage;
-//		}
 
-		Log.d(TAG,"buildFgServiceNotification title="+title+" msg="+msg+" chl="+notifChannel+" !="+important);
+		Log.d(TAG,"buildServiceNotification title="+title+" msg="+msg+" chl="+notifChannel+" !="+important);
 		NotificationCompat.Builder notificationBuilder =
 			new NotificationCompat.Builder(this, notifChannel)
 					.setContentTitle(title) // 1st line showing in top-bar
