@@ -2071,6 +2071,17 @@ public class WebCallService extends Service {
 		}
 
 		@android.webkit.JavascriptInterface
+		public void activityToFront() {
+			bringActivityToFront();
+		}
+
+		@android.webkit.JavascriptInterface
+		public void clearCookie() {
+			Log.d(TAG, "JS clearCookie");
+			storePrefsString("cookies", "");
+		}
+
+		@android.webkit.JavascriptInterface
 		public void gotoBasepage() {
 			// for clearCookie() in client.js
 			if(myWebView!=null) {
@@ -2234,9 +2245,7 @@ public class WebCallService extends Service {
 			// called by JS:goOffline()
 			Log.d(TAG,"JS wsClose");
 
-			Intent brintent = new Intent("webcall");
-			brintent.putExtra("state", "deactivated");
-			sendBroadcast(brintent);
+			postStatus("state", "deactivated");
 
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true);
@@ -2590,9 +2599,7 @@ public class WebCallService extends Service {
 			// code 1002: an endpoint is terminating the connection due to a protocol error
 			// code 1006: connection was closed abnormally (locally)
 			// code 1000: indicates a normal closure (when we click goOffline, or server forced disconnect)
-			Intent brintent = new Intent("webcall");
-			brintent.putExtra("state", "disconnected");
-			sendBroadcast(brintent);
+			postStatus("state", "disconnected");
 
 			autoPickup = false;
 
@@ -3207,9 +3214,7 @@ public class WebCallService extends Service {
 	private void calleeIsConnected() {
 		Log.d(TAG,"calleeIsConnected()");
 
-		Intent brintent = new Intent("webcall");
-		brintent.putExtra("state", "connected");
-		sendBroadcast(brintent);
+		postStatus("state", "connected");
 
 		// problem: statusMessage() (runJS) is not always executed in doze mode
 		// we need a method to display the last msg when device gets out of doze
@@ -3810,13 +3815,8 @@ public class WebCallService extends Service {
 						}
 						Log.d(TAG,"reconnecter con.connect() fail. give up.");
 
-						Intent brintent = new Intent("webcall");
-						brintent.putExtra("state", "disconnected");
-						sendBroadcast(brintent);
-
-						//Intent brintent = new Intent("webcall");
-						brintent.putExtra("state", "deactivated");
-						sendBroadcast(brintent);
+						postStatus("state", "disconnected");
+						postStatus("state", "deactivated");
 
 						if(reconnectBusy) {
 							if(beepOnLostNetworkMode>0) {
@@ -3879,9 +3879,11 @@ public class WebCallService extends Service {
 							" "+reader.readLine()+" "+reader.readLine()+" "+reader.readLine());
 						statusMessage("Gave up reconnecting. "+response,-1,true,true);
 
-						Intent brintent = new Intent("webcall");
-						brintent.putExtra("state", "deactivated");
-						sendBroadcast(brintent);
+						postStatus("state", "deactivated");
+// tmtmtm
+						if(wsAddr.equals("fatal") || wsAddr.equals("error") || wsAddr.equals("notregistered")) {
+							bringActivityToFront();
+						}
 
 						// we delay connectToServerIsWanted=false so that notifications are still shown 
 						final Runnable runnable2 = new Runnable() {
@@ -3987,13 +3989,8 @@ public class WebCallService extends Service {
 						reconnectBusy = false;
 						reconnectCounter = 0;
 
-						Intent brintent = new Intent("webcall");
-						brintent.putExtra("state", "disconnected");
-						sendBroadcast(brintent);
-
-						//Intent brintent = new Intent("webcall");
-						brintent.putExtra("state", "deactivated");
-						sendBroadcast(brintent);
+						postStatus("state", "disconnected");
+						postStatus("state", "deactivated");
 						return;
 					}
 
@@ -4029,9 +4026,7 @@ public class WebCallService extends Service {
 					// "android.webkit.WebViewFactory$MissingWebViewPackageException: "
 					//   "Failed to load WebView provider: No WebView installed
 
-					Intent brintent = new Intent("webcall");
-					brintent.putExtra("state", "disconnected");
-					sendBroadcast(brintent);
+					postStatus("state", "disconnected");
 
 					if(!connectToServerIsWanted) {
 						// abort forced
@@ -4093,9 +4088,7 @@ public class WebCallService extends Service {
 					}
 					reconnectCounter = 0;
 
-					//Intent brintent = new Intent("webcall");
-					brintent.putExtra("state", "deactivated");
-					sendBroadcast(brintent);
+					postStatus("state", "deactivated");
 					return;
 				}
 
@@ -4336,11 +4329,7 @@ public class WebCallService extends Service {
 		wsClient = null;
 
 		updateNotification("Offline",false);
-
-		Intent brintent = new Intent("webcall");
-		brintent.putExtra("state", "disconnected");
-		sendBroadcast(brintent);
-
+		postStatus("state", "disconnected");
 		return null;
 	}
 
@@ -4572,9 +4561,7 @@ public class WebCallService extends Service {
 			wifiLock.release();
 		}
 
-		Intent brintent = new Intent("webcall");
-		brintent.putExtra("state", "disconnected");
-		sendBroadcast(brintent);
+		postStatus("state", "disconnected");
 
 		statusMessage("Offline", -1, sendNotification,false);
 		lastStatusMessage = "";
@@ -5065,6 +5052,16 @@ public class WebCallService extends Service {
 		Intent brintent = new Intent("webcall");
 		brintent.putExtra(key, status);
 		sendBroadcast(brintent);
+	}
+
+	private void bringActivityToFront() {
+		Log.d(TAG, "bringActivityToFront");
+		Intent webcallToFrontIntent =
+			new Intent(context, WebCallCalleeActivity.class).putExtra("wakeup", "wake");
+		webcallToFrontIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+			Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY |
+			Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+		context.startActivity(webcallToFrontIntent);
 	}
 }
 

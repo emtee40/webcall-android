@@ -88,7 +88,7 @@ public class WebCallTileService extends TileService {
 						return;
 					}
 
-					Log.d(TAG, "! broadcastReceiver unknown cmd");
+					Log.d(TAG, "! broadcastReceiver unknown state="+state);
 				}
 			};
 			registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
