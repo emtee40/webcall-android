@@ -2077,6 +2077,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void clearCookie() {
+			// for clearCookie() in client.js
 			Log.d(TAG, "JS clearCookie");
 			storePrefsString("cookies", "");
 		}
