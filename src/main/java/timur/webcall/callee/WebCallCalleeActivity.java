@@ -120,7 +120,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 	private static final int FILE_REQ_CODE = 1341;	// onActivityResult
 
 	private WebCallService.WebCallServiceBinder webCallServiceBinder = null;
-	private volatile boolean boundService = false;
+//	private volatile boolean boundService = false;
 
 	private WindowManager.LayoutParams mParams;
 	private long lastSetLowBrightness = 0;
@@ -346,9 +346,13 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 							Log.d(TAG, "broadcastReceiver wsCon state="+state);
 						}
 					} else if(state.equals("disconnected")) {
+						// connection to webcall server lost, possibly retrying
+						Log.d(TAG, "broadcastReceiver wsCon state="+state);
+					} else if(state.equals("deactivated")) {
+						// connection to webcall server deactivated, no retrying
 						Log.d(TAG, "broadcastReceiver wsCon state="+state);
 					} else {
-						Log.d(TAG, "# broadcastReceiver unexpected state="+state);
+						Log.d(TAG, "! broadcastReceiver unexpected state="+state);
 					}
 					return;
 				}
@@ -714,7 +718,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			if(webCallServiceBinder==null) {
 				Log.d(TAG, "onServiceConnected bind service failed");
 			} else {
-				boundService = true;
+//				boundService = true;
 
 				// tell service that we are visible
 				activityVisible = true;
@@ -753,8 +757,11 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		@Override
 		public void onServiceDisconnected(ComponentName name) {
 			Log.d(TAG, "onServiceDisconnected");
-			webCallServiceBinder = null;
-			boundService = false;
+			if(webCallServiceBinder!=null) {
+				webCallServiceBinder=null;
+				unbindService(serviceConnection);	// wrong?
+			}
+//			boundService = false;
 		}
 	};
 
@@ -1327,22 +1334,17 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 		if(broadcastReceiver!=null) {
 			Log.d(TAG, "onDestroy unregisterReceiver broadcastReceiver");
-			if(broadcastReceiver!=null) {
-				unregisterReceiver(broadcastReceiver);
-				broadcastReceiver = null;
-				// -> WebCallService: activityDestroyed exitService()
-			}
+			unregisterReceiver(broadcastReceiver);
+			broadcastReceiver = null;
+			// -> WebCallService: activityDestroyed exitService()
 		}
 		if(webCallServiceBinder!=null) {
 			// tell our service that the activity is being destroyed
 			webCallServiceBinder.activityDestroyed();
-			if(serviceConnection!=null /*&& !startupFail*/) {
-				Log.d(TAG, "onDestroy unbindService");
-				unbindService(serviceConnection);
-				serviceConnection = null;
-			}
 			webCallServiceBinder = null;
-			boundService = false;
+			Log.d(TAG, "onDestroy unbindService");
+			unbindService(serviceConnection);
+//			boundService = false;
 		}
 		if(myNewWebView!=null) {
 			Log.d(TAG, "onDestroy myNewWebView.destroy()");
@@ -1840,7 +1842,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 		//Log.d(TAG, "proximityNear "+proximityNearFlag+" callInProgress="+callInProgress);
 		if(callInProgress>0) {
-			Log.d(TAG, "SensorEvent near "+callInProgress);
+			Log.d(TAG, "SensorEvent near callInProgress="+callInProgress);
 		}
 		if(callInProgress>1) {
 			// device is in-a-call: shut the screen on proximity
@@ -2009,7 +2011,8 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			handler.postDelayed(new Runnable() {
 				@Override
 				public void run() {
-					if(boundService && webCallServiceBinder!=null) {
+//					if(boundService && webCallServiceBinder!=null) {
+					if(webCallServiceBinder!=null) {
 						Log.d(TAG, "activityWake releaseWakeUpWakeLock");
 						webCallServiceBinder.releaseWakeUpWakeLock();
 					} else {

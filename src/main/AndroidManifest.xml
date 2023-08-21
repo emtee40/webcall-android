@@ -35,7 +35,8 @@
                  android:allowBackup="true"
 				 android:fullBackupContent="true"
 				 android:requestLegacyExternalStorage="true"
-		         android:icon="@mipmap/ic_launcher">
+		         android:icon="@mipmap/ic_launcher"
+		         android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".WebCallCalleeActivity"
             android:label="@string/app_name"
@@ -48,6 +49,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+			<intent-filter>
+				<action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES"/>
+			</intent-filter>
 
 			<intent-filter>
 				<action android:name="android.intent.action.VIEW" />
@@ -109,6 +114,19 @@
 		<service android:name=".WebCallService"
 			android:exported="false"
 			android:foregroundServiceType="microphone|camera" />
+
+		<service
+			android:name=".WebCallTileService"
+			android:label="@string/tileservice_label"
+			android:icon="@drawable/quicksettings_icon"
+			android:exported="true"
+			android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+			<intent-filter>
+				<action android:name="android.service.quicksettings.action.QS_TILE" />
+			</intent-filter>
+			<meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="true" />
+			<!--meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" /-->
+		</service>
 
 		<receiver android:name=".WebCallServiceReceiver"
 			android:exported="false">

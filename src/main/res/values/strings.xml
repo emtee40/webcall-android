@@ -20,10 +20,7 @@
     <string name="msg_beep_on_lost_network_off"    >Beep on no network: On</string>
     <string name="msg_start_on_boot_on"            >Start on boot: Off</string>
     <string name="msg_start_on_boot_off"           >Start on boot: On</string>
-<!--
-    <string name="msg_wifi_lock_is_on"             >Wifi preferred: Off</string>
-    <string name="msg_wifi_lock_is_off"            >Wifi preferred: On</string>
--->
+
     <string name="msg_wifi_lock_is_on"             >Keep Wifi locked: Off</string>
     <string name="msg_wifi_lock_is_off"            >Keep Wifi locked: On</string>
 
@@ -40,5 +37,10 @@
     <string name="msg_open_logs"                   >Open log file</string>
     <string name="msg_ext_logs_off"                ># Extended logs: Off</string>
     <string name="msg_ext_logs_on"                 ># Extended logs: On</string>
+
+    <string name="tileservice_label"               >WebCall</string>	<!-- 18-character limit -->
+    <string name="service_active"                  >Online</string>
+    <string name="service_inactive"                >Offline</string>
+    
 </resources>
 

@@ -1,0 +1,9 @@
+WebCall for Android
+Release notes v1.4.3:
+- custom ID's, create your own dial IDs
+- quick setting tile, new Textchat sound
+- quicker and more reliable Wifi/Mobile handover
+- more robust connectivity
+- many bugfixes: data-channel, no network fix, webview version fix,
+  main page overflow fix, blank status fix
+
