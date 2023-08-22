@@ -2074,14 +2074,7 @@ public class WebCallService extends Service {
 		public void activityToFront() {
 			bringActivityToFront();
 		}
-/*
-		@android.webkit.JavascriptInterface
-		public void clearCookie() {
-			// for clearCookie() in client.js
-			Log.d(TAG, "JS clearCookie");
-			storePrefsString("cookies", "");
-		}
-*/
+
 		@android.webkit.JavascriptInterface
 		public void gotoBasepage() {
 			// for client.js:clearCookie()
