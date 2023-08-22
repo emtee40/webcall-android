@@ -581,7 +581,20 @@ public class WebCallService extends Service {
 		Log.d(TAG,"onStartCommand "+loginUrl);
 		context = this;
 
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+
+		if(connectivityManager==null) {
+			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+		}
+		if(connectivityManager==null) {
+			Log.d(TAG,"# onStartCommand fatal cannot get connectivityManager");
+			return 0;
+		}
+		// note: haveNetworkInt keeps its old value through exitService() !!!
+		int oldHaveNetworkInt = haveNetworkInt;
+		checkNetworkState(false); // will set haveNetworkInt
+		Log.d(TAG,"onStartCommand haveNetworkInt="+haveNetworkInt+" ("+oldHaveNetworkInt+")");
+
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 			// create notificationChannel to start service in foreground
 			String msg = "Offline";
 			if(wsClient!=null) {
@@ -705,14 +718,6 @@ public class WebCallService extends Service {
 			return 0;
 		}
 
-		if(connectivityManager==null) {
-			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-		}
-		if(connectivityManager==null) {
-			Log.d(TAG,"# onStartCommand fatal cannot get connectivityManager");
-			return 0;
-		}
-
 		if(prefs==null) {
 			prefs = PreferenceManager.getDefaultSharedPreferences(context);
 		}
@@ -793,7 +798,6 @@ public class WebCallService extends Service {
 			// networkCallback code fully replaces checkNetworkState()
 			myNetworkCallback = new ConnectivityManager.NetworkCallback() {
 
-				//TODO: onAvailable() is doing nothing currently
 				@Override
 				public void onAvailable(Network network) {
 					super.onAvailable(network);
@@ -823,6 +827,8 @@ public class WebCallService extends Service {
 					} else {
 						Log.d(TAG,"# networkCallback onAvailable network==null");
 					}
+
+					checkNetworkState(false);
 				}
 
 				@Override
@@ -1029,52 +1035,6 @@ public class WebCallService extends Service {
 		} else {
 			// SDK_INT < Build.VERSION_CODES.N) // <api24
 			checkNetworkState(false);
-			if(networkStateReceiver==null) {
-				networkStateReceiver = new BroadcastReceiver() {
-					@Override
-					public void onReceive(Context context, Intent intent) {
-						if(extendedLogsFlag) {
-							Log.d(TAG,"networkStateReceiver");
-						}
-						checkNetworkState(true);
-					}
-				};
-				registerReceiver(networkStateReceiver,
-					new IntentFilter(android.net.ConnectivityManager.CONNECTIVITY_ACTION));
-			}
-			if(networkStateReceiver==null) {
-				Log.d(TAG,"# networkStateReceiver fatal cannot create");
-				return 0;
-			}
-
-/*
-			ConnectivityManager.NetworkCallback cbWifi = new ConnectivityManager.NetworkCallback() {
-				@Override
-				public void onAvailable(Network network) {
-					Log.d(TAG, "networkCallback onAvailable bind cbWifi");
-// TODO is bindProcessToNetwork() supported if SDK_INT < Build.VERSION_CODES.N) // <api24
-					connectivityManager.bindProcessToNetwork(network);
-
-// TODO do we need to bindProcessToNetwork(null) on unregister?
-				}
-			};
-
-			ConnectivityManager.NetworkCallback cbCellular = new ConnectivityManager.NetworkCallback() {
-				@Override
-				public void onAvailable(Network network) {
-					Log.d(TAG, "networkCallback onAvailable bind cbCellular");
-// TODO is bindProcessToNetwork() supported if SDK_INT < Build.VERSION_CODES.N) // <api24
-					connectivityManager.bindProcessToNetwork(network);
-
-// TODO do we need to bindProcessToNetwork(null) on unregister?
-				}
-			};
-			Log.d(TAG, "networkCallback init requestNetwork cbWifi");
-			connectivityManager.requestNetwork(requestForWifi, cbWifi);
-
-			Log.d(TAG, "networkCallback init requestNetwork cbCellular");
-			connectivityManager.requestNetwork(requestForCellular, cbCellular);
-*/
 		}
 
 
@@ -1248,12 +1208,21 @@ public class WebCallService extends Service {
 						Log.d(TAG,"onStartCommand connectWanted ex="+ex);
 					}
 				} else {
-					Log.d(TAG,"onStartCommand onStartIntent!=null");
+					Log.d(TAG,"onStartCommand onStartIntent!=null "+onStartIntent.toString());
 					// let's see if service was started by boot...
 					Bundle extras = onStartIntent.getExtras();
 					if(extras==null) {
 						Log.d(TAG,"onStartCommand extras==null");
-						storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
+						//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
+						try {
+							boolean connectWanted = prefs.getBoolean("connectWanted", false);
+								//Log.d(TAG,"onStartCommand connectWanted force false");
+								// connectWanted = false
+							Log.d(TAG,"onStartCommand connectWanted="+connectWanted);
+							autoCalleeConnect = connectWanted;
+						} catch(Exception ex) {
+							Log.d(TAG,"onStartCommand connectWanted ex="+ex);
+						}
 					} else {
 						String extraCommand = extras.getString("onstart");
 						if(extraCommand==null) {
@@ -3084,7 +3053,7 @@ public class WebCallService extends Service {
 				" pings="+pingCounter+ " "+batteryPct+
 				" "+BuildConfig.VERSION_NAME+
 				" "+currentDateTimeString());
-			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N) { // <api24
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N) { // api<24
 				checkNetworkState(false);
 			}
 			if(haveNetworkInt>0) {
@@ -4349,38 +4318,67 @@ public class WebCallService extends Service {
 			Log.d(TAG,"checkNetworkState");
 		}
 
-/* TODO: latest: cm.getNetworkCapabilities(cm.activeNetwork).hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-		ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-		    if (cm != null) {
-		        NetworkCapabilities capabilities = cm.getNetworkCapabilities(cm.getActiveNetwork());
-		        if (capabilities != null) {
-		            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-		                result = 2;
-		            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-		                result = 1;
-		            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-		                result = 3;
-		            }
-		        }
-		    }
+	    if(connectivityManager == null) {
+			Log.d(TAG,"checkNetworkState connectivityManager==null");
+			haveNetworkInt=0;
+			return;
+	    }
+
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+	        NetworkCapabilities capabilities =
+				connectivityManager.getNetworkCapabilities(connectivityManager.getActiveNetwork());
+	        if(capabilities == null) {
+				Log.d(TAG,"checkNetworkState capabilities==null");
+				haveNetworkInt=0;
+				return;
+	        }
+            if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+		        haveNetworkInt = 2;
+				Log.d(TAG,"checkNetworkState TRANSPORT_WIFI");
+				return;
+            }
+            if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+		        haveNetworkInt = 1;
+				Log.d(TAG,"checkNetworkState TRANSPORT_CELLULAR");
+				return;
+            }
+            if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+               capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+		        haveNetworkInt = 3;
+				Log.d(TAG,"checkNetworkState transport other");
+				return;
+            }
 		} else {
-		    if (cm != null) {
-		        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-		        if (activeNetwork != null) {
-		            // connected to the internet
-		            if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
-		                result = 2;
-		            } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
-		                result = 1;
-		            } else if (activeNetwork.getType() == ConnectivityManager.TYPE_VPN) {
-		                result = 3;
-		            }
-		        }
+			NetworkInfo netActiveInfo = connectivityManager.getActiveNetworkInfo();
+			if(netActiveInfo==null) {
+				Log.d(TAG,"checkNetworkState netActiveInfo==null");
+				// this will make onClose postpone reconnect attempts
+				haveNetworkInt=0;
+				//statusMessage("No network",-1,true,false);
+				return;
+			}
+
+		    if(netActiveInfo.getType() == ConnectivityManager.TYPE_WIFI) { // ==1
+		        haveNetworkInt = 2;
+				Log.d(TAG,"checkNetworkState TYPE_WIFI");
+				return;
+		    }
+		    if(netActiveInfo.getType() == ConnectivityManager.TYPE_MOBILE) { // ==0
+		        haveNetworkInt = 1;
+				Log.d(TAG,"checkNetworkState TYPE_MOBILE");
+				return;
+		    }
+		    if(netActiveInfo.getType() == ConnectivityManager.TYPE_VPN ||      // ==17
+		              netActiveInfo.getType() == ConnectivityManager.TYPE_ETHERNET) { // ==9
+		        haveNetworkInt = 3;
+				Log.d(TAG,"checkNetworkState type other");
+				return;
 		    }
 		}
-*/
-		NetworkInfo netActiveInfo = connectivityManager.getActiveNetworkInfo();
+
+		Log.d(TAG,"! checkNetworkState nothing");
+		haveNetworkInt=0;
+/*
 		NetworkInfo wifiInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
 		NetworkInfo mobileInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
 		if((netActiveInfo==null || !netActiveInfo.isConnected()) &&
@@ -4512,6 +4510,7 @@ public class WebCallService extends Service {
 			// this will make onClose postpone reconnect attempts
 			haveNetworkInt=0;
 		}
+*/
 	}
 
 	private void disconnectHost(boolean sendNotification) {

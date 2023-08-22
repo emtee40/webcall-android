@@ -114,7 +114,7 @@ public class WebCallTileService extends TileService {
 			Intent serviceIntent = new Intent(this, WebCallService.class);
 
 			// service initialization
-			serviceIntent.putExtra("onstart", "donothing");
+			//serviceIntent.putExtra("onstart", "donothing");
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 				// foreground service
 				Log.d(TAG,"onBind bindService foreground service");
