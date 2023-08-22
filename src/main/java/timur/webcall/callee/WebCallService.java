@@ -1745,6 +1745,7 @@ public class WebCallService extends Service {
 		}
 
 		public int haveNetwork() {
+			// used by tile
 			return haveNetworkInt;
 		}
 
@@ -2062,7 +2063,14 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean isNetwork() {
+			// used by client.js
 			return haveNetworkInt>0;
+		}
+
+		@android.webkit.JavascriptInterface
+		public int haveNetwork() {
+			// used by webcall.js
+			return haveNetworkInt;
 		}
 
 		@android.webkit.JavascriptInterface

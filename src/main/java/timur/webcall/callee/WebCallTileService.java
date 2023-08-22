@@ -204,6 +204,8 @@ public class WebCallTileService extends TileService {
 		isActive = !isActive;
 		//Log.d(TAG,"toggle to state active="+isActive);
 		if(isActive) {
+//			if(webCallServiceBinder.haveNetwork() <= 0) {
+//			}
 			Log.d(TAG,"toggle goOnline()");
 			webCallServiceBinder.goOnline();
 			// goOnline() can fail; broadcastReceiver events may call updateTile() with connect state

@@ -140,6 +140,16 @@ function insecureTlsAction() {
 }
 
 function requestNewId() {
+	let haveNetwork = Android.haveNetwork();
+	console.log('haveNetwork='+haveNetwork);
+	if(haveNetwork<=0) {
+		// there is no point advancing if we have no network
+		console.log('no network');
+		Android.toast("No network");
+		setTimeout(function() { document.activeElement.blur(); },100); // deactivate button
+		return;
+	}
+
 	if(formUsername.value!="") {
 		Android.toast("To register a new User-ID, clear the User-ID form.");
 		setTimeout(function() { document.activeElement.blur(); },100); // deactivate button
@@ -226,17 +236,16 @@ function connectServer() {
 		return;
 	}
 
-/*
-	let isNetwork = Android.isNetwork();
-	console.log('isNetwork='+isNetwork);
-	if(!isNetwork) {
+	let haveNetwork = Android.haveNetwork();
+	console.log('haveNetwork='+haveNetwork);
+	if(haveNetwork<=0) {
 		// there is no point advancing if we have no network
+		// and without this check /online below may complain "Connection failed. Check server address..."
 		console.log('no network');
 		Android.toast("No network");
 		setTimeout(function() { document.activeElement.blur(); },100); // deactivate button
 		return;
 	}
-*/
 
 	var abort = false;
 	if(divspinnerframe) {
