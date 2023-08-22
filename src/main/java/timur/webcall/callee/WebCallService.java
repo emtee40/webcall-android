@@ -2074,17 +2074,17 @@ public class WebCallService extends Service {
 		public void activityToFront() {
 			bringActivityToFront();
 		}
-
+/*
 		@android.webkit.JavascriptInterface
 		public void clearCookie() {
 			// for clearCookie() in client.js
 			Log.d(TAG, "JS clearCookie");
 			storePrefsString("cookies", "");
 		}
-
+*/
 		@android.webkit.JavascriptInterface
 		public void gotoBasepage() {
-			// for clearCookie() in client.js
+			// for client.js:clearCookie()
 			if(myWebView!=null) {
 				// loadUrl() must be called on main thread
 				myWebView.post(new Runnable() {
@@ -3533,6 +3533,7 @@ public class WebCallService extends Service {
 
 	private void clearCookies() {
 		Log.d(TAG,"clearCookies");
+		storePrefsString("cookies", "");
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
 			CookieManager.getInstance().removeAllCookies(null);
 			CookieManager.getInstance().flush();
