@@ -10,6 +10,7 @@ import android.content.ServiceConnection;
 import android.content.ComponentName;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
+import android.app.PendingIntent;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -82,6 +83,21 @@ public class WebCallTileService extends TileService {
 								requestListeningState(context, new ComponentName(context, WebCallTileService.class));
 							}
 							updateTile(false);
+						} else if(state.equals("openactivity")) {
+							// service wants us to open webcall activity and close the drawer
+							Intent webcallToFrontIntent =
+								new Intent(context, WebCallCalleeActivity.class).putExtra("wakeup", "wake");
+							webcallToFrontIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+								Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY |
+								Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+//							if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+//								PendingIntent pendingIntent = PendingIntent.getBroadcast(
+//										context, 0, webcallToFrontIntent, PendingIntent.FLAG_IMMUTABLE);
+//								startActivityAndCollapse(pendingIntent);
+//							} else {
+								startActivityAndCollapse(webcallToFrontIntent);
+//							}
+
 						} else {
 							//Log.d(TAG, "! broadcastReceiver unexpected state="+state);
 						}

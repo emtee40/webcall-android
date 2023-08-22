@@ -3875,9 +3875,10 @@ public class WebCallService extends Service {
 						statusMessage("Gave up reconnecting. "+response,-1,true,true);
 
 						postStatus("state", "deactivated");
-// tmtmtm
 						if(wsAddr.equals("fatal") || wsAddr.equals("error") || wsAddr.equals("notregistered")) {
 							bringActivityToFront();
+							// in addition we do this to tell the tile to close the notification drawer
+							postStatus("state", "openactivity");
 						}
 
 						// we delay connectToServerIsWanted=false so that notifications are still shown 
