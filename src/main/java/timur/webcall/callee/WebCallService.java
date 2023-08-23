@@ -367,7 +367,7 @@ public class WebCallService extends Service {
 
 	@Override
 	public void onDestroy() {
-		Log.d(TAG, "onDestroy");
+		Log.d(TAG, "onDestroy connected="+(wsClient!=null));
 		if(alarmReceiver!=null) {
 			unregisterReceiver(alarmReceiver);
 			alarmReceiver = null;
@@ -395,6 +395,7 @@ public class WebCallService extends Service {
 				myNetworkCallback = null;
 			}
 		}
+		Log.d(TAG, "onDestroy done connected="+(wsClient!=null));
 	}
 
 	@Override
@@ -427,7 +428,7 @@ public class WebCallService extends Service {
 
 	@Override
 	public void onCreate() {
-		Log.d(TAG,"onCreate "+BuildConfig.VERSION_NAME+" "+Build.VERSION.SDK_INT);
+		Log.d(TAG,"onCreate "+BuildConfig.VERSION_NAME+" "+Build.VERSION.SDK_INT+" connected="+(wsClient!=null));
 		stopSelfFlag = false;
 
 		alarmReceiver = new AlarmReceiver();
@@ -574,13 +575,13 @@ public class WebCallService extends Service {
 			}
 		};
 		registerReceiver(serviceCmdReceiver, new IntentFilter("serviceCmdReceiver"));
+		Log.d(TAG,"onCreate done connected="+(wsClient!=null));
 	}
 
 	@Override
 	public int onStartCommand(Intent onStartIntent, int flags, int startId) {
-		Log.d(TAG,"onStartCommand "+loginUrl);
+		Log.d(TAG,"onStartCommand "+loginUrl+" connected="+(wsClient!=null));
 		context = this;
-
 
 		if(connectivityManager==null) {
 			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -3225,6 +3226,7 @@ public class WebCallService extends Service {
 		if(wsClient!=null) {
 			// close() the old (damaged) wsClient connection
 			// closeBlocking() makes no sense here bc server has stopped sending pings
+			Log.d(TAG,"startReconnecter close old wsClient");
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
 			tmpWsClient.close();
@@ -3749,6 +3751,7 @@ public class WebCallService extends Service {
 						// network error: retry login
 						if(wsClient!=null) {
 							// wsClient must be null before we start reconnecter
+							Log.d(TAG,"reconnecter status!=200 wsClient.close() before start");
 							wsClient.close();
 							wsClient = null;
 						}
@@ -4115,6 +4118,7 @@ public class WebCallService extends Service {
 					// service reconnect: set auto=true telling server this is not a manual login
 					wsAddr += "&auto=true";
 				}
+				Log.d(TAG,"connectHost create new WsClient");
 				wsClient = new WsClient(new URI(wsAddr));
 			}
 			if(wsClient==null) {
@@ -4293,7 +4297,7 @@ public class WebCallService extends Service {
 			Log.e(TAG,"connectHost SSLPeerUnverifiedException",ex);
 		}
 
-		Log.d(TAG,"connectHost fail, return null");
+		Log.d(TAG,"connectHost fail, clear wsClient, return null");
 		wsClient = null;
 
 		updateNotification("Offline",false);
@@ -4534,6 +4538,7 @@ public class WebCallService extends Service {
 				networkStateReceiver = null;
 			}
 			// clearing wsClient, so that onClose (triggered by closeBlocking()) won't start new wakeIntent
+			Log.d(TAG,"disconnectHost clear wsClient");
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
 			try {

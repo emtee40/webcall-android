@@ -135,24 +135,7 @@ public class WebCallTileService extends TileService {
 		}
 
 		if(webCallServiceBinder==null) {
-			Intent serviceIntent = new Intent(this, WebCallService.class);
-
-			// service initialization
-			//serviceIntent.putExtra("onstart", "donothing");
-			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-				// foreground service
-				Log.d(TAG,"onBind bindService foreground service");
-				startForegroundService(serviceIntent);
-				// note: doing stopSelf() without first doing stopForeground() can crash our service
-			} else {
-				// regular service
-				Log.d(TAG,"onBind bindService regular service");
-				startService(serviceIntent); // -> service.onStartCommand()
-			}
-
-			// here we bind the service, so that we can call goOnline()/goOffline()
-			bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-			Log.d(TAG,"onBind bindService requested");
+			bindService(false);
 		} else {
 			Log.d(TAG,"onBind service already bound");
 		}
@@ -193,8 +176,19 @@ public class WebCallTileService extends TileService {
 			Log.d(TAG,"onClick no webCallServiceBinder delayMS="+delayMS);
 			final Runnable runnable = new Runnable() {
 				public void run() {
-					Log.d(TAG,"onClick delayed toggle()");
-					toggle();
+					if(webCallServiceBinder==null) {
+						Log.d(TAG,"onClick no webCallServiceBinder2 bindService(forceCreate) + drop click");
+						bindService(true);
+						// drop the click; lets see if user is happy with current state
+/*
+						long delayMS2 = 200l; // should only take <20ms incl starting
+						Log.d(TAG,"onClick no webCallServiceBinder2 delayMS2="+delayMS2);
+						scheduler.schedule(this, delayMS2, TimeUnit.MILLISECONDS);
+*/
+					} else {
+						Log.d(TAG,"onClick delayed toggle()");
+						toggle();
+					}
 				}
 			};
 			scheduler.schedule(runnable, delayMS, TimeUnit.MILLISECONDS);
@@ -207,6 +201,8 @@ public class WebCallTileService extends TileService {
 	private void toggle() {
 		if(webCallServiceBinder==null) {
 			Log.d(TAG,"# toggle skip, no webCallServiceBinder");
+			// restart service?
+			//bindService();
 			return;
 		}
 
@@ -266,6 +262,37 @@ public class WebCallTileService extends TileService {
 		tile.updateTile();
 	}
 
+	private void bindService(boolean force) {
+		Intent serviceIntent = new Intent(this, WebCallService.class);
+		Log.d(TAG,"bindService");
+		if(!force && bindService(serviceIntent, serviceConnection, 0)) {
+			Log.d(TAG,"bindService true");
+		} else {
+			Log.d(TAG,"bindService false");
+
+			// service initialization
+			//serviceIntent.putExtra("onstart", "donothing");
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+				// foreground service
+				Log.d(TAG,"bindService foreground service");
+				startForegroundService(serviceIntent);
+				// note: doing stopSelf() without first doing stopForeground() can crash our service
+			} else {
+				// regular service
+				Log.d(TAG,"bindService regular service");
+				startService(serviceIntent); // -> service.onStartCommand()
+			}
+
+			// here we bind the service, so that we can call goOnline()/goOffline()
+			//bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+			if(bindService(serviceIntent, serviceConnection, 0)) {
+				Log.d(TAG,"bindService requested");
+			} else {
+				Log.d(TAG,"bindService requested failed");
+			}
+		}
+	}
+
 	private ServiceConnection serviceConnection = new ServiceConnection() {
 		@Override
 		public void onServiceConnected(ComponentName name, IBinder service) {
@@ -285,9 +312,10 @@ public class WebCallTileService extends TileService {
 			if(webCallServiceBinder!=null) {
 				Log.d(TAG,"onServiceDisconnected unbindService");
 				webCallServiceBinder = null;
-				if(serviceConnection!=null) {
-					unbindService(serviceConnection);
-				}
+				//if(serviceConnection!=null) {
+				//	unbindService(serviceConnection);
+				//}
+				updateTile(false);
 			}
 		}
 	};
