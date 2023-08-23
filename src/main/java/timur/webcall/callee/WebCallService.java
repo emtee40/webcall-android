@@ -271,8 +271,9 @@ public class WebCallService extends Service {
 	// audioToSpeakerActive holds the current state of audioToSpeakerMode
 	private static volatile boolean audioToSpeakerActive = false;
 
-	// loginUrl will be constructed from webcalldomain + "/rtcsig/login"
+	// loginUrl and loginUserName will be constructed in setLoginUrl()
 	private static volatile String loginUrl = null;
+	private static volatile String loginUserName = null;
 
 	// pingCounter is the number of server pings received and processed
 	private static volatile long pingCounter = 0l;
@@ -3156,14 +3157,15 @@ public class WebCallService extends Service {
 			return;
 		}
 		try {
-			username = prefs.getString("username", "").toLowerCase(Locale.getDefault());
-			Log.d(TAG,"setLoginUrl username="+username);
+			// loginUserName = calleeID
+			loginUserName = prefs.getString("username", "").toLowerCase(Locale.getDefault());
+			Log.d(TAG,"setLoginUrl username="+loginUserName);
 		} catch(Exception ex) {
 			Log.d(TAG,"# setLoginUrl username ex="+ex);
 			return;
 		}
 
-		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+username+
+		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName+
 					"&ver="+ BuildConfig.VERSION_NAME+"_"+getWebviewVersion(); // +"&re=true";
 		Log.d(TAG,"setLoginUrl="+loginUrl);
 	}
@@ -3517,9 +3519,9 @@ public class WebCallService extends Service {
 					if(haveNetworkInt<=0) {
 						// we pause reconnecter; if network comes back, checkNetworkState() will
 						// schedule a new reconnecter if connectToServerIsWanted is set
-						if(!connectToServerIsWanted) {
+						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
-							statusMessage("No network. Reconnecting paused.",-1,true,false);
+							statusMessage("No network. Ready to re-connect...",-1,true,false);
 						} else {
 							Log.d(TAG,"reconnecter no network");
 							statusMessage("No network.",-1,true,false);
@@ -3538,7 +3540,7 @@ public class WebCallService extends Service {
 
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl);
-				statusMessage("Login...",-1,true,false);
+				statusMessage("Login "+loginUserName+"...",-1,true,false);
 				try {
 					URL url = new URL(loginUrl);
 					//Log.d(TAG,"reconnecter openCon("+url+")");
@@ -3863,7 +3865,15 @@ public class WebCallService extends Service {
 						return;
 					}
 
-					statusMessage("Connecting..",-1,true,false);
+					Log.d(TAG,"connectHost("+wsAddr+") "+haveNetworkInt);
+					if(haveNetworkInt==2) {
+						statusMessage("Connecting via Wifi...",-1,true,false);
+					} else if(haveNetworkInt==1) {
+						statusMessage("Connecting via Mobile...",-1,true,false);
+					} else {
+						statusMessage("Connecting..",-1,true,false);
+					}
+
 					//Log.d(TAG,"reconnecter connectHost("+wsAddr+")");
 					// connectHost() will send updateNotification()
 					// connectHost() will set and return wsClient on success
@@ -4922,8 +4932,9 @@ public class WebCallService extends Service {
 		Log.d(TAG,"buildServiceNotification title="+title+" msg="+msg+" chl="+notifChannel+" !="+important);
 		NotificationCompat.Builder notificationBuilder =
 			new NotificationCompat.Builder(this, notifChannel)
-					.setContentTitle(title) // 1st line showing in top-bar
-					.setContentText(msg) // 2nd line showing in top-bar
+//					.setContentTitle(title) // 1st line showing in top-bar
+//					.setContentText(msg) // 2nd line showing in top-bar
+					.setContentTitle(msg) // 1st line showing in top-bar
 					.setSmallIcon(R.mipmap.notification_icon)
 					.setContentIntent(pendingIntent);
 		return notificationBuilder.build();
