@@ -47,7 +47,31 @@ public class WebCallTileService extends TileService {
 	}
 
 	@Override
+	public void onCreate() {
+		super.onCreate();
+		Log.d(TAG,"onCreate");
+	}
+
+	@Override
+	public void onDestroy() {
+		super.onDestroy();
+		Log.d(TAG,"onDestroy");
+		if(webCallServiceBinder!=null) {
+			Log.d(TAG,"onDestroy unbindService");
+			unbindService(serviceConnection);
+			webCallServiceBinder = null;
+		}
+		if(broadcastReceiver!=null) {
+			Log.d(TAG, "onDestroy unregister broadcastReceiver");
+			unregisterReceiver(broadcastReceiver);
+			// -> WebCallService: activityDestroyed exitService()
+			broadcastReceiver = null;
+		}
+	}
+
+	@Override
 	public IBinder onBind(Intent intent) {
+		super.onBind(intent);
 		Log.d(TAG,"onBind intent="+intent.toString());
 		Context context = this;
 
@@ -139,20 +163,6 @@ public class WebCallTileService extends TileService {
 	    return super.onBind(intent);
 	}
 
-	@Override
-	public void onDestroy() {
-		if(webCallServiceBinder!=null) {
-			Log.d(TAG,"onDestroy unbindService");
-			unbindService(serviceConnection);
-			webCallServiceBinder = null;
-		}
-		if(broadcastReceiver!=null) {
-			Log.d(TAG, "onDestroy unregister broadcastReceiver");
-			unregisterReceiver(broadcastReceiver);
-			// -> WebCallService: activityDestroyed exitService()
-			broadcastReceiver = null;
-		}
-	}
 
 	// Called when your app can update your tile.
 	@Override
@@ -205,6 +215,7 @@ public class WebCallTileService extends TileService {
 		//Log.d(TAG,"toggle to state active="+isActive);
 		if(isActive) {
 //			if(webCallServiceBinder.haveNetwork() <= 0) {
+//				// is it useless to goOnline without a network?
 //			}
 			Log.d(TAG,"toggle goOnline()");
 			webCallServiceBinder.goOnline();

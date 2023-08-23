@@ -1897,37 +1897,33 @@ public class WebCallService extends Service {
 		}
 
 		public void goOnline() {
-			Log.d(TAG, "goOnline()");
+			// called by tile
+			connectToServerIsWanted = true;
+			storePrefsBoolean("connectWanted",true);
+
 			if(wsClient!=null) {
 				Log.d(TAG, "! goOnline() already online");
 			} else if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG, "goOnline() -> runJS('goOnline();')");
-// TODO: if runJS("goOnline()") does NOT lead to wsClient!=null -> bring activity to front?
 				runJS("goOnline(true,'service');",null);
 			} else {
 				Log.d(TAG, "goOnline() -> startReconnecter()");
-// TODO if startReconnecter() fails -> launch activity?
-// TODO startReconnecter() needs scheduler, but it may be null
-// to initialized it we then need "scheduler = Executors.newScheduledThreadPool(20)" as in onStartCommand()
-
-// TODO check if reconnector is already running
-				connectToServerIsWanted = true;
-				storePrefsBoolean("connectWanted",true);
 				startReconnecter(false,0);
 			}
 		}
 		public void goOffline() {
+			connectToServerIsWanted = false;
+			storePrefsBoolean("connectWanted",false);
 			postStatus("state", "deactivated");
 
 			if(wsClient==null) {
 				Log.d(TAG, "! goOffline() already offline");
 			} else if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG, "goOffline() -> runJS('goOffline();')");
-				runJS("goOffline();",null);
+				runJS("goOffline('service');",null);
 			} else {
 				Log.d(TAG, "goOffline() -> disconnectHost()");
 				disconnectHost(true);
-				storePrefsBoolean("connectWanted",false);
 			}
 		}
 	}
@@ -3241,7 +3237,6 @@ public class WebCallService extends Service {
 
 		setLoginUrl();
 		if(!reconnectBusy) {
-// tmtmtm
 			// TODO do we need to copy cookies here?
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 				Log.d(TAG,"startReconnecter cancel old then start new reconnectSchedFuture");
@@ -3252,7 +3247,7 @@ public class WebCallService extends Service {
 			}
 			reconnectSchedFuture = scheduler.schedule(reconnecter, reconnectDelaySecs, TimeUnit.SECONDS);
 		} else {
-			Log.d(TAG,"! startReconnecter no reconnecter: reconnectBusy="+reconnectBusy);
+			Log.d(TAG,"! startReconnecter skip: reconnectBusy="+reconnectBusy);
 		}
 	}
 
