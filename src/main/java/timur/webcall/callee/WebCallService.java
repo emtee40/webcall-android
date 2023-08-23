@@ -314,7 +314,6 @@ public class WebCallService extends Service {
 	private static volatile boolean activityVisible = false;
 	private static volatile boolean autoPickup = false;
 	private static volatile MediaPlayer mediaPlayer = null;
-//	private static volatile boolean activityWasDiscarded = false;
 	private static volatile boolean calleeIsReady = false;
 	private static volatile boolean stopSelfFlag = false;
 	private static volatile boolean ringFlag = false;
@@ -369,33 +368,59 @@ public class WebCallService extends Service {
 	public void onDestroy() {
 		Log.d(TAG, "onDestroy connected="+(wsClient!=null));
 		if(alarmReceiver!=null) {
+			Log.d(TAG, "onDestroy unregisterReceiver alarmReceiver");
 			unregisterReceiver(alarmReceiver);
 			alarmReceiver = null;
 		}
 		if(powerConnectionReceiver!=null) {
+			Log.d(TAG, "onDestroy unregisterReceiver powerConnectionReceiver");
 			unregisterReceiver(powerConnectionReceiver);
 			powerConnectionReceiver = null;
 		}
 		if(networkStateReceiver!=null) {
+			Log.d(TAG, "onDestroy unregisterReceiver networkStateReceiver");
 			unregisterReceiver(networkStateReceiver);
 			networkStateReceiver = null;
 		}
 		if(dozeStateReceiver!=null) {
+			Log.d(TAG, "onDestroy unregisterReceiver dozeStateReceiver");
 			unregisterReceiver(dozeStateReceiver);
 			dozeStateReceiver = null;
 		}
 		if(serviceCmdReceiver!=null) {
 			// java.lang.IllegalArgumentException: Receiver not registered: timur.webcall.callee.WebCallService
+			Log.d(TAG,"onDestroy unregisterReceiver serviceCmdReceiver");
 			unregisterReceiver(serviceCmdReceiver);
 			serviceCmdReceiver = null;
 		}
 		if(connectivityManager!=null && myNetworkCallback!=null) {
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // >=api24
+				Log.d(TAG,"onDestroy unregisterNetworkCallback");
 				connectivityManager.unregisterNetworkCallback(myNetworkCallback);
-				myNetworkCallback = null;
 			}
+			myNetworkCallback = null;
+			connectivityManager = null;
 		}
-		Log.d(TAG, "onDestroy done connected="+(wsClient!=null));
+		if(wifiLock!=null && wifiLock.isHeld()) {
+			Log.d(TAG,"onDestroy wifiLock.release()");
+			wifiLock.release();
+		}
+		connectToServerIsWanted = false; // to stop reconnecter
+		if(wsClient!=null) {
+			Log.d(TAG,"onDestroy wsClient.close()");
+			wsClient.close();
+			wsClient = null;
+		}
+		if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
+			Log.d(TAG,"onDestroy keepAwakeWakeLock.release");
+			keepAwakeWakeLock.release();
+		}
+
+		// turn tile off
+		//statusMessage("Service terminated",-1,true,false);
+		updateNotification("Service terminated", false);
+		postStatus("state", "deactivated");
+		Log.d(TAG, "onDestroy done");
 	}
 
 	@Override
@@ -585,6 +610,8 @@ public class WebCallService extends Service {
 
 		if(connectivityManager==null) {
 			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+		} else {
+			Log.d(TAG,"! onStartCommand connectivityManager!=null");
 		}
 		if(connectivityManager==null) {
 			Log.d(TAG,"# onStartCommand fatal cannot get connectivityManager");
@@ -604,12 +631,13 @@ public class WebCallService extends Service {
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
 			startForeground(NOTIF_ID,buildServiceNotification("",msg,false));
 		}
-
+/*
 		if(loginUrl!=null && scheduler!=null) {
 			// no new init needed
+			Log.d(TAG,"onStartCommand loginUrl and scheduler set, return START_STICKY");
 			return START_STICKY;
 		}
-
+*/
 		if(batteryStatusfilter==null) {
 			batteryStatusfilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
 			//batteryStatus = context.registerReceiver(null, batteryStatusfilter);
@@ -648,7 +676,7 @@ public class WebCallService extends Service {
 			return 0;
 		}
 
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // >=api23
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // >=api23
 			if(extendedLogsFlag) {
 				// check with isIgnoringBatteryOptimizations()
 				String packageName = context.getPackageName();
@@ -795,7 +823,7 @@ public class WebCallService extends Service {
 		final NetworkRequest requestForUSB =
 			new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_USB).build();
 		*/
-		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // >=api24
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && myNetworkCallback==null) { // >=api24
 			// networkCallback code fully replaces checkNetworkState()
 			myNetworkCallback = new ConnectivityManager.NetworkCallback() {
 
@@ -1153,23 +1181,14 @@ public class WebCallService extends Service {
 		}
 
 		if(wsClient!=null) {
-//			activityWasDiscarded = true;
-			Log.d(TAG,"onStartCommand got existing wsClient ");
+			Log.d(TAG,"! onStartCommand got existing wsClient ");
 			// probably activity was discarded, got restarted, and now we see service is still connected
 			//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else if(reconnectBusy) {
-			Log.d(TAG,"onStartCommand got reconnectBusy");
+			Log.d(TAG,"! onStartCommand got reconnectBusy");
 			// TODO not sure about this
-			storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
+			//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else {
-/*
-// TODO delete code: this was moved to connectHost() (on success)
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-				// create notificationChannel to start service in foreground
-				Log.d(TAG,"onStartCommand startForeground");
-				startForeground(NOTIF_ID,buildServiceNotification("","",false));
-			}
-*/
 			String webcalldomain = null;
 			String username = null;
 			try {
@@ -2132,21 +2151,6 @@ public class WebCallService extends Service {
 			// it will call calleeConnected() / calleeIsConnected()
 			// then we will send: updateNotification awaitingCalls
 			// then we will broadcast: "state", "connected"
-/*
-			// in case the activity was discarded, we need to call:
-			if(activityWasDiscarded) {
-				activityWasDiscarded = false;
-				if(myWebView==null) {
-					Log.d(TAG,"# JS wsOpen return existing wsClient: activityWasDiscarded but myWebView==null");
-				} else if(!webviewMainPageLoaded) {
-					Log.d(TAG,"# JS wsOpen return existing wsClient activityWasDiscarded !webviewMainPageLoaded");
-				} else {
-					Log.d(TAG,"JS wsOpen return existing wsClient");
-				}
-			} else {
-				Log.d(TAG,"JS wsOpen return existing wsClient: no activityWasDiscarded");
-			}
-*/
 			return wsClient;
 		}
 
@@ -2578,7 +2582,10 @@ public class WebCallService extends Service {
 				Log.d(TAG,"onClose code=1000");
 				wsClient = null;
 				if(reconnectSchedFuture==null) {
-					statusMessage("disconnected from WebCall server",-1,true,false);
+					// if wsClient was closed by onDestroy, networkStateReceiver will be null
+					if(networkStateReceiver!=null) {
+						statusMessage("disconnected from WebCall server",-1,true,false);
+					}
 				}
 				if(myWebView!=null && webviewMainPageLoaded) {
 					// disable offline-button and enable online-button
