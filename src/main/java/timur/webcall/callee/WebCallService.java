@@ -774,7 +774,7 @@ public class WebCallService extends Service {
 		}
 
 		try {
-			setWifiLockMode = prefs.getInt("setWifiLock", 1);
+			setWifiLockMode = prefs.getInt("setWifiLockMode", 1);
 			Log.d(TAG,"onStartCommand setWifiLockMode="+setWifiLockMode);
 		} catch(Exception ex) {
 			Log.d(TAG,"# onStartCommand setWifiLockMode ex="+ex);
@@ -858,7 +858,7 @@ public class WebCallService extends Service {
 					lock.lock();
 					int oldNetworkInt = haveNetworkInt;
 					checkNetworkState(false);
-					if(haveNetworkInt!=oldNetworkInt) {
+					if(haveNetworkInt>0 && haveNetworkInt!=oldNetworkInt) {
 						networkChange(haveNetworkInt,oldNetworkInt);
 					}
 					lock.unlock();
@@ -1779,7 +1779,7 @@ public class WebCallService extends Service {
 						Log.d(TAG,"setWifiLock wifiLock release");
 						wifiLock.release();
 					}
-				} else if(haveNetworkInt==2) {
+				} /*else if(haveNetworkInt==2) {
 					if(wifiLock==null) {
 						Log.d(TAG,"setWifiLock wifiLock==null");
 					} else if(wifiLock.isHeld()) {
@@ -1788,7 +1788,7 @@ public class WebCallService extends Service {
 						Log.d(TAG,"setWifiLock wifiLock.acquire");
 						wifiLock.acquire();
 					}
-				}
+				}*/
 			}
 			return setWifiLockMode;
 		}
@@ -2190,6 +2190,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void menu() {
+			// activity openContextMenu
 			postStatus("cmd", "menu");
 		}
 
@@ -2599,6 +2600,7 @@ public class WebCallService extends Service {
 						}
 					}
 
+// TODO most likely haveNetworkInt will be 0 within 100ms (delayed onLost) but right now it is still >0
 					if(reconnectSchedFuture==null && !reconnectBusy && haveNetworkInt>0) {
 						// if no reconnecter is scheduled at this time (say, by checkLastPing())
 						// then schedule a new reconnecter
@@ -4170,7 +4172,7 @@ public class WebCallService extends Service {
 						} else if(wifiLock==null) {
 							Log.d(TAG,"connectHost wifiLock==null");
 						} else if(wifiLock.isHeld()) {
-							Log.d(TAG,"connectHost wifiLock isHeld");
+							//Log.d(TAG,"connectHost wifiLock isHeld");
 						} else {
 							// enable wifi lock
 							Log.d(TAG,"connectHost wifiLock.acquire");
@@ -4278,6 +4280,20 @@ public class WebCallService extends Service {
             if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
 		        haveNetworkInt = 2;
 				Log.d(TAG,"checkNetworkState TRANSPORT_WIFI");
+
+				if(connectToServerIsWanted) {
+					if(setWifiLockMode<=0) {
+						Log.d(TAG,"checkNetworkState WifiLockMode off");
+					} else if(wifiLock==null) {
+						Log.d(TAG,"checkNetworkState wifiLock==null");
+					} else if(wifiLock.isHeld()) {
+						Log.d(TAG,"checkNetworkState wifiLock isHeld");
+					} else {
+						// enable wifi lock
+						Log.d(TAG,"checkNetworkState wifiLock.acquire");
+						wifiLock.acquire();
+					}
+				}
 				return;
             }
             if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
@@ -4304,6 +4320,19 @@ public class WebCallService extends Service {
 		    if(netActiveInfo.getType() == ConnectivityManager.TYPE_WIFI) { // ==1
 		        haveNetworkInt = 2;
 				Log.d(TAG,"checkNetworkState TYPE_WIFI");
+				if(connectToServerIsWanted) {
+					if(setWifiLockMode<=0) {
+						Log.d(TAG,"checkNetworkState WifiLockMode off");
+					} else if(wifiLock==null) {
+						Log.d(TAG,"checkNetworkState wifiLock==null");
+					} else if(wifiLock.isHeld()) {
+						Log.d(TAG,"checkNetworkState wifiLock isHeld");
+					} else {
+						// enable wifi lock
+						Log.d(TAG,"checkNetworkState wifiLock.acquire");
+						wifiLock.acquire();
+					}
+				}
 				return;
 		    }
 		    if(netActiveInfo.getType() == ConnectivityManager.TYPE_MOBILE) { // ==0
@@ -4828,7 +4857,7 @@ public class WebCallService extends Service {
 		if(myWebView==null) {
 //			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip no webview");
 		} else if(!webviewMainPageLoaded) {
-			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip notOnMainPage");
+//			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip notOnMainPage");
 		} else if(msg=="") {
 //			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip msg empty");
 		} else {
@@ -5016,22 +5045,21 @@ public class WebCallService extends Service {
 			}
 		} else if(newNetworkInt==2 && oldNetworkInt!=2) {
 			// gained wifi
-			// lock wifi if required
-			if(setWifiLockMode<=0) {
-				// prefer wifi not enabled by user
-				Log.d(TAG,"networkChange gainWifi WifiLockMode off");
-			} else if(wifiLock==null) {
-				Log.d(TAG,"# networkChange gainWifi wifiLock==null");
-			} else if(wifiLock.isHeld()) {
-				Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
-			} else {
-				// enable wifi lock
-				Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
-				wifiLock.acquire();
-			}
-
+			statusMessage("Using Wifi network",-1,false,false);
 			if(connectToServerIsWanted) {
-				statusMessage("Using Wifi network",-1,false,false);
+				// lock wifi if required
+				if(setWifiLockMode<=0) {
+					// prefer wifi not enabled by user
+					Log.d(TAG,"networkChange gainWifi WifiLockMode off");
+				} else if(wifiLock==null) {
+					Log.d(TAG,"# networkChange gainWifi wifiLock==null");
+				} else if(wifiLock.isHeld()) {
+					Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
+				} else {
+					// enable wifi lock
+					Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
+					wifiLock.acquire();
+				}
 				mustReconnectOnNetworkChange = true;
 			} else {
 				Log.d(TAG,"networkChange gainWifi but conWant==false");
@@ -5092,9 +5120,7 @@ public class WebCallService extends Service {
 
 	private void postStatus(String key, String status) {
 		Log.d(TAG,"postStatus "+key+" "+status);
-		Intent brintent = new Intent("webcall");
-		brintent.putExtra(key, status);
-		sendBroadcast(brintent);
+		sendBroadcast(new Intent("webcall").putExtra(key,status));
 	}
 
 	private void bringActivityToFront() {

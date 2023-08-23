@@ -1224,9 +1224,12 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		Log.d(TAG, "onStart");
 
 		activityVisible = true;
+
 		// tell service that we are visible
 		sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
-		super.onStart();
+
+		// wake tile?
+		sendBroadcast(new Intent("webcall").putExtra("empty","empty"));
 
 		// set screenBrightness only if LowBrightness (0.01f) occured more than 2s ago
 		if(System.currentTimeMillis() - lastSetLowBrightness >= 2000) {
@@ -1667,6 +1670,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				os.write(blobAsBytes);
 				os.flush();
 				os.close();
+
 				Intent intent = new Intent("webcall");
 				intent.putExtra("toast", "file "+filename+" stored in download directory");
 				sendBroadcast(intent);

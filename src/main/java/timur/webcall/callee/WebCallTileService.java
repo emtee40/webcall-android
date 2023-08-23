@@ -76,7 +76,7 @@ public class WebCallTileService extends TileService {
 		Context context = this;
 
 		if(scheduler==null) {
-			Log.d(TAG,"onBind Executors.newScheduledThreadPool(20)");
+			Log.d(TAG,"onBind Executors.newScheduledThreadPool(2)");
 			scheduler = Executors.newScheduledThreadPool(2);
 		}
 
@@ -123,12 +123,9 @@ public class WebCallTileService extends TileService {
 //							}
 
 						} else {
-							//Log.d(TAG, "! broadcastReceiver unexpected state="+state);
+							Log.d(TAG, "! broadcastReceiver unknown state="+state);
 						}
-						return;
 					}
-
-					Log.d(TAG, "! broadcastReceiver unknown state="+state);
 				}
 			};
 			registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
