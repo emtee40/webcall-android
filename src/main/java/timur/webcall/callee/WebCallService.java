@@ -835,21 +835,17 @@ public class WebCallService extends Service {
 						if(netInfo != null) {
 							// getType() 1=wifi, 0=mobile (extra="internet.eplus.de")
 							Log.d(TAG,"networkCallback onAvailable avail="+netInfo.getType()+" "+netInfo.getExtraInfo());
-/*
-// TODO is bindProcessToNetwork() supported on Build.VERSION_CODES.N (api24) or Build.VERSION_CODES.M (api25) ?
-//							if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-								// no matter what network type: bind our process to it
-								// ALL networking sockets are bound to that network until bindProcessToNetwork(null)
+	/*
+	// TODO is bindProcessToNetwork() supported on Build.VERSION_CODES.N (api24) or Build.VERSION_CODES.M (api25) ?
+	//							if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+									// no matter what network type: bind our process to it
+									// ALL networking sockets are bound to that network until bindProcessToNetwork(null)
 
-// TODO either we un-bind it in onLost(), or we make sure we only bind once!
-//								connectivityManager.bindProcessToNetwork(network);
-//							}
-// TODO do we need to bindProcessToNetwork(null) on unregister?
-*/
-
-							//need to be connected to server to do this?
-							//runJS("newPeerCon();",null);
-							//runJS("triggerOnIceCandidates();",null);
+	// TODO either we un-bind it in onLost(), or we make sure we only bind once!
+	//								connectivityManager.bindProcessToNetwork(network);
+	//							}
+	// TODO do we need to bindProcessToNetwork(null) on unregister?
+	*/
 						} else {
 							Log.d(TAG,"# networkCallback onAvailable netInfo==null");
 						}
@@ -857,13 +853,21 @@ public class WebCallService extends Service {
 						Log.d(TAG,"# networkCallback onAvailable network==null");
 					}
 
+					// sometimes after onAvailable() we get onCapabilitiesChanged(), sometimes (on P9 in doze) we don't
+					// now onAvailable() will trigger networkChange() if haveNetworkInt!=oldNetworkInt
+					lock.lock();
+					int oldNetworkInt = haveNetworkInt;
 					checkNetworkState(false);
+					if(haveNetworkInt!=oldNetworkInt) {
+						networkChange(haveNetworkInt,oldNetworkInt);
+					}
+					lock.unlock();
 				}
 
 				@Override
 				public void onLost(Network network) {
 			        super.onLost(network);
-					haveNetworkInt = -1;
+/*
 					if(network!=null) {
 						Log.d(TAG,"networkCallback onLost conWant="+connectToServerIsWanted);
 						// check the type of network lost...
@@ -877,7 +881,7 @@ public class WebCallService extends Service {
 								statusMessage("Network lost",-1,true,false);
 							}
 						} else {
-							Log.d(TAG,"networkCallback onLost netInfo==null");
+							Log.d(TAG,"networkCallback onLost netInfo==null haveNetworkInt="+haveNetworkInt);
 							if(haveNetworkInt==2) {
 								statusMessage("Wifi lost",-1,true,false);
 							} else {
@@ -887,17 +891,29 @@ public class WebCallService extends Service {
 					} else {
 						Log.d(TAG,"networkCallback onLost netInfo==null");
 						if(haveNetworkInt==2) {
-							statusMessage("Wifi lost",-1,true,false);
+							statusMessage("Lost Wifi network",-1,true,false);
+						} else if(haveNetworkInt==1) {
+							statusMessage("Lost Mobile network",-1,true,false);
 						} else {
-							statusMessage("Network lost",-1,true,false);
+							statusMessage("Lost network",-1,true,false);
 						}
+					}
+*/
+					if(haveNetworkInt==2) {
+						Log.d(TAG,"networkCallback onLost Wifi");
+						statusMessage("Lost Wifi network",-1,true,false);
+					} else if(haveNetworkInt==1) {
+						Log.d(TAG,"networkCallback onLost mobile");
+						statusMessage("Lost Mobile network",-1,true,false);
+					} else {
+						Log.d(TAG,"networkCallback onLost other "+haveNetworkInt);
+						statusMessage("Lost network",-1,true,false);
 					}
 					if(wifiLock!=null && wifiLock.isHeld()) {
 						Log.d(TAG,"networkCallback onLost wifiLock.release");
 						wifiLock.release();
 					}
 					haveNetworkInt = 0;
-
 					// onCapabilitiesChanged will not be called (on SDK <= 25)
 					if(Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
 						// nothing to do; waiting for network to come back to start reconnector
@@ -919,6 +935,7 @@ public class WebCallService extends Service {
 					// comes only after onAvailable(), not after onLost()
 					// this is why we wifiLock.release() in onLost()
 					lock.lock();
+					int oldNetworkInt = haveNetworkInt;
 					int newNetworkInt = 0;
 					if(networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
 						newNetworkInt = 1;
@@ -928,9 +945,10 @@ public class WebCallService extends Service {
 							networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_USB)) {
 						newNetworkInt = 3;
 					}
+					haveNetworkInt = newNetworkInt;
 
-					if(newNetworkInt!=haveNetworkInt) {
-						Log.d(TAG,"networkCallback capab change: " + haveNetworkInt+" "+newNetworkInt+" "+
+					if(haveNetworkInt!=oldNetworkInt) {
+						Log.d(TAG,"networkCallback capabChange: " + oldNetworkInt+" -> "+haveNetworkInt+" "+
 							" conWanted="+connectToServerIsWanted+
 							" wsCon="+(wsClient!=null)+
 							" wifi="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)+
@@ -939,104 +957,23 @@ public class WebCallService extends Service {
 							" vpn="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_VPN)+
 							" wifiAw="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE)+
 							" usb="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_USB));
-					}
 
-					if(newNetworkInt!=2 && haveNetworkInt==2) {
-						// lost wifi
-						if(wifiLock!=null && wifiLock.isHeld()) {
-							// release wifi lock
-							wifiLock.release();
-							Log.d(TAG,"networkCallback wifi->other wifiLock.release");
-						}
-					}
-					boolean mustReconnectOnNetworkChange = false;
-					if(newNetworkInt==1 && haveNetworkInt!=1) {
-						// gained mobile
-						if(connectToServerIsWanted) {
-							statusMessage("Using mobile network",-1,false,false);
-							mustReconnectOnNetworkChange = true;
-						} else {
-							Log.d(TAG,"networkCallback mobile but conWant==false");
-						}
-					}
-					if(newNetworkInt==2 && haveNetworkInt!=2) {
-						// gained wifi
-						// lock wifi if required
-						if(setWifiLockMode<=0) {
-							// prefer wifi not enabled by user
-							Log.d(TAG,"networkCallback gainWifi WifiLockMode off");
-						} else if(wifiLock==null) {
-							Log.d(TAG,"# networkCallback gainWifi wifiLock==null");
-						} else if(wifiLock.isHeld()) {
-							Log.d(TAG,"networkCallback gainWifi wifiLock isHeld already");
-						} else {
-							// enable wifi lock
-							Log.d(TAG,"networkCallback gainWifi wifiLock.acquire");
-							wifiLock.acquire();
-						}
-
-						if(connectToServerIsWanted) {
-							statusMessage("Using Wifi network",-1,false,false);
-							mustReconnectOnNetworkChange = true;
-						} else {
-							Log.d(TAG,"networkCallback gainWifi but conWant==false");
-						}
-					}
-					if(newNetworkInt==3 && haveNetworkInt!=3) {
-						// gained other net
-						if(connectToServerIsWanted) {
-							statusMessage("Using other network",-1,false,false);
-							mustReconnectOnNetworkChange = true;
-						} else {
-							Log.d(TAG,"networkCallback gainOther but conWant==false");
-						}
-					}
-
-					// gained new network: start reconnecter	// TODO sure?
-					if(mustReconnectOnNetworkChange && connectToServerIsWanted && !reconnectBusy) {
-						// call scheduler.schedule()
-						if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
-							Log.d(TAG,"networkCallback keepAwakeWakeLock.acquire");
-							keepAwakeWakeLock.acquire(3 * 60 * 1000);
-							keepAwakeWakeLockStartTime = (new Date()).getTime();
-						}
-						// set haveNetworkInt before scheduler in case scheduler starts reconnecter immediately
-						haveNetworkInt = newNetworkInt;
-
-						if(!reconnectBusy) {
-							if(newNetworkInt==2) {
-								statusMessage("Reconnect Wifi...",-1,true,false);
-							} else if(newNetworkInt==1) {
-								statusMessage("Reconnect Mobile...",-1,true,false);
+						if(haveNetworkInt<=0) {
+							// no new network, only lost a network
+							if(oldNetworkInt==2) {
+								Log.d(TAG,"networkCallback capabChange Wifi");
+								statusMessage("Lost Wifi network",-1,true,false);
+							} else if(oldNetworkInt==1) {
+								Log.d(TAG,"networkCallback capabChange mobile");
+								statusMessage("Lost Mobile network",-1,true,false);
 							} else {
-								statusMessage("Reconnect other...",-1,true,false);
+								Log.d(TAG,"networkCallback capabChange other "+oldNetworkInt);
+								statusMessage("Lost network",-1,true,false);
 							}
-							if(wsClient!=null) {
-								// disconnect old connection to avoid server re-login denial ("already/still logged in")
-								// note: this will cause: onClose code=1000
-								Log.d(TAG,"networkCallback disconnect old connection");
-								wsClient.close();
-								wsClient = null;
-							}
-							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-								// why wait for the scheduled reconnecter job
-								// let's cancel it and start in 3s from now
-								// (so that the server has enough time to detect the disconnect)
-								Log.d(TAG,"networkCallback cancel reconnectSchedFuture");
-								if(reconnectSchedFuture.cancel(false)) {
-									// next run reconnecter
-									Log.d(TAG,"networkCallback restart reconnecter in 3s");
-									reconnectSchedFuture = scheduler.schedule(reconnecter, 3 ,TimeUnit.SECONDS);
-								}
-							} else {
-								Log.d(TAG,"networkCallback start reconnecter in 3s");
-								reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
-							}
-						} else {
-							Log.d(TAG,"networkCallback no reconnecter: reconnectBusy="+reconnectBusy);
 						}
 					}
-					haveNetworkInt = newNetworkInt;
+
+					networkChange(haveNetworkInt,oldNetworkInt);
 					lock.unlock();
 				}
 
@@ -1923,6 +1860,8 @@ public class WebCallService extends Service {
 
 			if(wsClient!=null) {
 				Log.d(TAG, "! goOnline() already online");
+			} else if(haveNetworkInt<=0) {
+				Log.d(TAG, "! goOnline() no network");
 			} else if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG, "goOnline() -> runJS('goOnline();')");
 				runJS("goOnline(true,'service');",null);
@@ -2588,9 +2527,8 @@ public class WebCallService extends Service {
 					}
 				}
 				if(myWebView!=null && webviewMainPageLoaded) {
-					// disable offline-button and enable online-button
-					// TODO etwas stimmt aber nicht:
-					// connectToServerIsWanted wird hier noch nicht gelöscht, später kommt noch ein alarm + reconnect
+					// richtig: connectToServerIsWanted wird hier nicht gelöscht, reconnect bleibt aktiv
+					// falsch: disable offline-button and enable online-button
 					runJS("wsOnClose2();",null);
 					//runJS("wsOnClose2();", new ValueCallback<String>() {
 					//	@Override
@@ -2612,7 +2550,7 @@ public class WebCallService extends Service {
 
 					/*
 					// what is screenForWifiMode doing here?
-					if(haveNetworkInt==0 && screenForWifiMode>0) {
+					if(haveNetworkInt<=0 && screenForWifiMode>0) {
 						if(wifiLock!=null && wifiLock.isHeld()) {
 							Log.d(TAG,"onClose wifiLock release");
 							wifiLock.release();
@@ -2648,7 +2586,6 @@ public class WebCallService extends Service {
 						tmpWsClient.close();
 
 						if(myWebView!=null && webviewMainPageLoaded) {
-							Log.d(TAG,"onClose runJS('wsOnClose2()'");
 							runJS("wsOnClose2()",null); // set wsConn=null; abort blinkButtonFunc()
 						}
 						Log.d(TAG,"onClose wsClient.close() done");
@@ -2662,7 +2599,7 @@ public class WebCallService extends Service {
 						}
 					}
 
-					if(reconnectSchedFuture==null && !reconnectBusy) {
+					if(reconnectSchedFuture==null && !reconnectBusy && haveNetworkInt>0) {
 						// if no reconnecter is scheduled at this time (say, by checkLastPing())
 						// then schedule a new reconnecter
 						// schedule in 5s to give server some time to detect the discon
@@ -3082,7 +3019,7 @@ public class WebCallService extends Service {
 				checkLastPing(true,0);
 			} else {
 				if(!connectToServerIsWanted) {
-					Log.d(TAG,"alarm skip, no connectToServerIsWanted");
+					Log.d(TAG,"alarm skip reconnect, no connectToServerIsWanted");
 				/*
 				} else if(reconnectBusy) {
 					// alarm only fires if device is in doze, and then reconnectSchedFuture does NOT fire
@@ -3091,6 +3028,8 @@ public class WebCallService extends Service {
 					// and startReconnecter
 					Log.d(TAG,"alarm skip, reconnectBusy");
 				*/
+				} else if(haveNetworkInt<=0) {
+					Log.d(TAG,"alarm skip reconnect, no network");
 				} else {
 					// stop reconnectSchedFuture, clear reconnectBusy
 					if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
@@ -3099,7 +3038,6 @@ public class WebCallService extends Service {
 						reconnectSchedFuture = null;
 					}
 					reconnectBusy = false;
-
 					Log.d(TAG,"alarm startReconnecter");
 					startReconnecter(true,0);
 				}
@@ -3239,13 +3177,13 @@ public class WebCallService extends Service {
 			tmpWsClient.close();
 		}
 
-		if(haveNetworkInt==0 && wakeIfNoNet && screenForWifiMode>0) {
-			Log.d(TAG,"startReconnecter haveNoNetwork: wakeIfNoNet + screenForWifiMode");
+		if(haveNetworkInt<=0 && wakeIfNoNet && screenForWifiMode>0) {
+			Log.d(TAG,"startReconnecter noNetwork: wakeIfNoNet + screenForWifiMode");
 			wakeUpFromDoze();
 		}
 
-		setLoginUrl();
 		if(!reconnectBusy) {
+			setLoginUrl();
 			// TODO do we need to copy cookies here?
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 				Log.d(TAG,"startReconnecter cancel old then start new reconnectSchedFuture");
@@ -3454,8 +3392,8 @@ public class WebCallService extends Service {
 	}
 
 	private void wakeUpFromDoze() {
+		// this is for wakeing up WIFI; if wifi is switched off, doing this does not make sense
 		if(wifiManager.isWifiEnabled()==false) {
-			// this is for wakeing up WIFI; if wifi is switched off, doing this does not make sense
 			Log.d(TAG,"wakeUpFromDoze denied, wifi is not enabled");
 			return;
 		}
@@ -3994,7 +3932,6 @@ public class WebCallService extends Service {
 					// we trust now that server will receive "init" and respond with "sessionId|"+codetag
 					// onMessage() will receive this and call runJS(wsOnMessage2('sessionId|v3.5.5','serv-direct');)
 					// this should call calleeIsConnected() - but this does not always work
-// tmtmtm TODO calleeIsConnected() is not always called
 
 					// calleeIsConnected() will send awaitingCalls notification
 					// calleeIsConnected() will brodcast state connected
@@ -5058,7 +4995,103 @@ public class WebCallService extends Service {
 		return pInfo;
 	}
 
+	private void networkChange(int newNetworkInt, int oldNetworkInt) {
+		// called by onAvailable() and onCapabilitiesChanged()
+		boolean mustReconnectOnNetworkChange = false;
+		if(newNetworkInt!=2 && oldNetworkInt==2) {
+			// lost wifi
+			if(wifiLock!=null && wifiLock.isHeld()) {
+				// release wifi lock
+				wifiLock.release();
+				Log.d(TAG,"networkChange wifi->other wifiLock.release");
+			}
+		}
+		if(newNetworkInt==1 && oldNetworkInt!=1) {
+			// gained mobile
+			if(connectToServerIsWanted) {
+				statusMessage("Using mobile network",-1,false,false);
+				mustReconnectOnNetworkChange = true;
+			} else {
+				Log.d(TAG,"networkChange mobile but conWant==false");
+			}
+		} else if(newNetworkInt==2 && oldNetworkInt!=2) {
+			// gained wifi
+			// lock wifi if required
+			if(setWifiLockMode<=0) {
+				// prefer wifi not enabled by user
+				Log.d(TAG,"networkChange gainWifi WifiLockMode off");
+			} else if(wifiLock==null) {
+				Log.d(TAG,"# networkChange gainWifi wifiLock==null");
+			} else if(wifiLock.isHeld()) {
+				Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
+			} else {
+				// enable wifi lock
+				Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
+				wifiLock.acquire();
+			}
+
+			if(connectToServerIsWanted) {
+				statusMessage("Using Wifi network",-1,false,false);
+				mustReconnectOnNetworkChange = true;
+			} else {
+				Log.d(TAG,"networkChange gainWifi but conWant==false");
+			}
+		} else if(newNetworkInt==3 && oldNetworkInt!=3) {
+			// gained other net
+			if(connectToServerIsWanted) {
+				statusMessage("Using other network",-1,false,false);
+				mustReconnectOnNetworkChange = true;
+			} else {
+				Log.d(TAG,"networkChange gainOther but conWant==false");
+			}
+		}
+
+		// gained new network: start reconnecter
+		if(mustReconnectOnNetworkChange && connectToServerIsWanted && !reconnectBusy) {
+			if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
+				Log.d(TAG,"networkChange keepAwakeWakeLock.acquire");
+				keepAwakeWakeLock.acquire(3 * 60 * 1000);
+				keepAwakeWakeLockStartTime = (new Date()).getTime();
+			}
+
+			if(!reconnectBusy) {
+				// call scheduler.schedule()
+				if(newNetworkInt==2) {
+					statusMessage("Reconnect Wifi...",-1,true,false);
+				} else if(newNetworkInt==1) {
+					statusMessage("Reconnect Mobile...",-1,true,false);
+				} else {
+					statusMessage("Reconnect other...",-1,true,false);
+				}
+				if(wsClient!=null) {
+					// disconnect old connection to avoid server re-login denial ("already/still logged in")
+					// note: this will cause: onClose code=1000
+					Log.d(TAG,"networkChange disconnect old connection");
+					wsClient.close();
+					wsClient = null;
+				}
+				if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+					// why wait for the scheduled reconnecter job
+					// let's cancel it and start in 3s from now
+					// (so that the server has enough time to detect the disconnect)
+					Log.d(TAG,"networkChange cancel reconnectSchedFuture");
+					if(reconnectSchedFuture.cancel(false)) {
+						// next run reconnecter
+						Log.d(TAG,"networkChange restart reconnecter in 3s");
+						reconnectSchedFuture = scheduler.schedule(reconnecter, 3 ,TimeUnit.SECONDS);
+					}
+				} else {
+					Log.d(TAG,"networkChange start reconnecter in 3s");
+					reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
+				}
+			} else {
+				Log.d(TAG,"networkChange no reconnecter: reconnectBusy="+reconnectBusy);
+			}
+		}
+	}
+
 	private void postStatus(String key, String status) {
+		Log.d(TAG,"postStatus "+key+" "+status);
 		Intent brintent = new Intent("webcall");
 		brintent.putExtra(key, status);
 		sendBroadcast(brintent);
