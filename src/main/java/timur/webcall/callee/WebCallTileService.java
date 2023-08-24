@@ -31,6 +31,7 @@ public class WebCallTileService extends TileService {
 	private static volatile int getStateLoopCounter = 0;
 
 	private static BroadcastReceiver broadcastReceiver = null;
+	private static int currentState = Tile.STATE_INACTIVE;
 
 	// Called when the user adds your tile.
 	@Override
@@ -72,6 +73,7 @@ public class WebCallTileService extends TileService {
 	@Override
 	public IBinder onBind(Intent intent) {
 		super.onBind(intent);
+		// intent usually contains: "cmp=timur.webcall.callee/.WebCallTileService (has extras)"
 		Log.d(TAG,"onBind intent="+intent.toString());
 		Context context = this;
 
@@ -132,7 +134,8 @@ public class WebCallTileService extends TileService {
 		}
 
 		if(webCallServiceBinder==null) {
-			bindService(false);
+			// try to bind to WebCallService (don't force load)
+			bindService();
 		} else {
 			Log.d(TAG,"onBind service already bound");
 		}
@@ -175,7 +178,7 @@ public class WebCallTileService extends TileService {
 				public void run() {
 					if(webCallServiceBinder==null) {
 						Log.d(TAG,"onClick no webCallServiceBinder2 bindService(forceCreate) + drop click");
-						bindService(true);
+						bindService();
 						// drop the click; lets see if user is happy with current state
 /*
 						long delayMS2 = 200l; // should only take <20ms incl starting
@@ -198,18 +201,17 @@ public class WebCallTileService extends TileService {
 	private void toggle() {
 		if(webCallServiceBinder==null) {
 			Log.d(TAG,"# toggle skip, no webCallServiceBinder");
-			// restart service?
-			//bindService();
 			return;
 		}
 
 		boolean isActive = getServiceStatus();
+		if(currentState==Tile.STATE_ACTIVE) {
+			isActive = true;
+			Log.d(TAG,"toggle override serviceStat to currentState (ACTIVE)");
+		}
 		isActive = !isActive;
 		//Log.d(TAG,"toggle to state active="+isActive);
 		if(isActive) {
-//			if(webCallServiceBinder.haveNetwork() <= 0) {
-//				// is it useless to goOnline without a network?
-//			}
 			Log.d(TAG,"toggle goOnline()");
 			webCallServiceBinder.goOnline();
 			// goOnline() can fail; broadcastReceiver events may call updateTile() with connect state
@@ -222,15 +224,15 @@ public class WebCallTileService extends TileService {
 
 	private boolean getServiceStatus() {
 		boolean isActive = false;
-		//isActive = WebCallService.wsClient!=null;
 		if(webCallServiceBinder==null) {
 			Log.d(TAG,"! getServiceStatus no webCallServiceBinder");
 		} else {
 			if(webCallServiceBinder.connectToServerIsWanted()) {
+				Log.d(TAG,"getServiceStatus connectToServerIsWanted set");
 				isActive = webCallServiceBinder.webcallConnectType()>0;
 			}
 		}
-		//Log.d(TAG,"getServiceStatus isActive="+isActive);
+		Log.d(TAG,"getServiceStatus isActive="+isActive);
 		return isActive;
 	}
 
@@ -238,7 +240,6 @@ public class WebCallTileService extends TileService {
 		Tile tile = this.getQsTile();
 		String newLabel;
 		int newState;
-
 		if(isActive) {
 			newState = Tile.STATE_ACTIVE;
 			newLabel = String.format(Locale.US, "%s %s",
@@ -254,20 +255,20 @@ public class WebCallTileService extends TileService {
 		Log.d(TAG,"updateTile isActive="+isActive+" "+newLabel);
 		tile.setLabel(newLabel);
 		tile.setState(newState);
+		currentState = newState;
 
 		// let the tile to pick up changes
 		tile.updateTile();
 	}
 
-	private void bindService(boolean force) {
+	private void bindService() {
 		Intent serviceIntent = new Intent(this, WebCallService.class);
-		Log.d(TAG,"bindService");
-		if(!force && bindService(serviceIntent, serviceConnection, 0)) {
-			Log.d(TAG,"bindService true");
+		Log.d(TAG,"bindService alive="+WebCallService.serviceAlive+" clients="+WebCallService.boundServiceClients);
+		if(WebCallService.serviceAlive) {
+			Log.d(TAG,"bindService already alive");
 		} else {
-			Log.d(TAG,"bindService false");
-
-			// service initialization
+			Log.d(TAG,"bindService must be loaded");
+			// no extra: quick auto-connect
 			//serviceIntent.putExtra("onstart", "donothing");
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 				// foreground service
@@ -279,14 +280,14 @@ public class WebCallTileService extends TileService {
 				Log.d(TAG,"bindService regular service");
 				startService(serviceIntent); // -> service.onStartCommand()
 			}
+		}
 
-			// here we bind the service, so that we can call goOnline()/goOffline()
-			//bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-			if(bindService(serviceIntent, serviceConnection, 0)) {
-				Log.d(TAG,"bindService requested");
-			} else {
-				Log.d(TAG,"bindService requested failed");
-			}
+		// here we bind the service, so that we can call goOnline()/goOffline()
+		//bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+		if(bindService(serviceIntent, serviceConnection, 0)) {
+			Log.d(TAG,"bindService requested");
+		} else {
+			Log.d(TAG,"bindService requested failed");
 		}
 	}
 
