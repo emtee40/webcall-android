@@ -409,8 +409,11 @@ public class WebCallService extends Service {
 		connectToServerIsWanted = false; // to stop reconnecter
 		if(wsClient!=null) {
 			Log.d(TAG,"onDestroy wsClient.close()");
-			wsClient.close();
+//			wsClient.close();
+//			wsClient = null;
+			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
+			tmpWsClient.close();
 		}
 		if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
 			Log.d(TAG,"onDestroy keepAwakeWakeLock.release");
@@ -921,13 +924,18 @@ public class WebCallService extends Service {
 						// who sets connectToServerIsWanted=false ?
 					}
 
+/* outcommented bc this leeds to: onClose code=1000 ("normal closure") and not 1006
 					// if connected, do disconnect
 					if(wsClient!=null) {
 						// note: this may cause: onClose code=1000
 						Log.d(TAG,"networkCallback onLost close old connection");
-						wsClient.close();
+//						wsClient.close();
+//						wsClient = null;
+						WebSocketClient tmpWsClient = wsClient;
 						wsClient = null;
+						tmpWsClient.close();
 					}
+*/
 					// note: reconnector will be automatically re-started when some network returns
 				}
 
@@ -1152,6 +1160,7 @@ public class WebCallService extends Service {
 				setLoginUrl();
 				Log.d(TAG,"onStartCommand loginUrl="+loginUrl);
 				boolean autoCalleeConnect = false;
+				int autoCalleeStartDelay = 16; // seconds, default value for start from boot
 				if(onStartIntent==null) {
 					Log.d(TAG,"onStartCommand onStartIntent==null");
 					// service restart after crash
@@ -1170,7 +1179,9 @@ public class WebCallService extends Service {
 					// let's see if service was started by boot...
 					Bundle extras = onStartIntent.getExtras();
 					if(extras==null) {
+						// started from tile
 						Log.d(TAG,"onStartCommand extras==null");
+						autoCalleeStartDelay = 3; // seconds, value for start from tile
 						//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 						try {
 							boolean connectWanted = prefs.getBoolean("connectWanted", false);
@@ -1213,15 +1224,13 @@ public class WebCallService extends Service {
 						connectToServerIsWanted = true;
 						storePrefsBoolean("connectWanted",true); // used in case of service crash + restart
 						Log.d(TAG,"onStartCommand autoCalleeConnect loginUrl="+loginUrl);
+
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 							Log.d(TAG,"onStartCommand autoCalleeConnect cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 							reconnectSchedFuture = null;
 						}
-						// NOTE: if we wait less than 15secs, our connection may establish
-						// but will then be quickly disconnected - not sure why
-						//statusMessage("onStartCommand autoCalleeConnect schedule reconnecter",false,false);
-						reconnectSchedFuture = scheduler.schedule(reconnecter, 16, TimeUnit.SECONDS);
+						reconnectSchedFuture = scheduler.schedule(reconnecter, autoCalleeStartDelay, TimeUnit.SECONDS);
 					}
 				}
 			}
@@ -1515,7 +1524,7 @@ public class WebCallService extends Service {
 								@Override
 								public void onReceiveValue(String s) {
 									Log.d(TAG,"onPageFinished main page: broadcast state connected");
-									postStatus("state", "connected");
+									postStatus("state","connected");
 
 									if(calleeIsReady) { // gotStream2() -> calleeReady() did already happen
 										// schedule delayed processWebRtcMessages()
@@ -1861,8 +1870,9 @@ public class WebCallService extends Service {
 
 			if(wsClient!=null) {
 				Log.d(TAG, "! goOnline() already online");
-			} else if(haveNetworkInt<=0) {
-				Log.d(TAG, "! goOnline() no network");
+//			} else if(haveNetworkInt<=0) {
+//				Log.d(TAG, "! goOnline() no network");
+// if we abort here, the tile icon will not be set
 			} else if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG, "goOnline() -> runJS('goOnline();')");
 				runJS("goOnline(true,'service');",null);
@@ -3130,7 +3140,7 @@ public class WebCallService extends Service {
 	private void calleeIsConnected() {
 		Log.d(TAG,"calleeIsConnected()");
 
-		postStatus("state", "connected");
+		postStatus("state","connected");
 
 		// problem: statusMessage() (runJS) is not always executed in doze mode
 		// we need a method to display the last msg when device gets out of doze
@@ -3521,7 +3531,14 @@ public class WebCallService extends Service {
 						// schedule a new reconnecter if connectToServerIsWanted is set
 						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
-							statusMessage("No network. Ready to re-connect...",-1,true,false);
+//							statusMessage("No network. Ready to connect...",-1,true,false);
+//							statusMessage("No network. Connector paused...",-1,true,false);
+//							statusMessage("No network. Connector in wait mode.",-1,true,false);
+							statusMessage("No network. Connector in standby.",-1,true,false);
+
+							// we are not yet connected, but we turn tile on only in calleeIsConnected()
+							// because we are waiting for network, we turn it on here
+							postStatus("state","connected");
 						} else {
 							Log.d(TAG,"reconnecter no network");
 							statusMessage("No network.",-1,true,false);
@@ -4563,13 +4580,13 @@ public class WebCallService extends Service {
 				if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 					Log.d(TAG,"disconnectHost delayed stopForeground()");
 					stopForeground(true); // true = removeNotification
-
-					// without notificationManager.cancel(NOTIF_ID) our notification icon will not go
-					Log.d(TAG,"disconnectHost notificationManager.cancel(NOTIF_ID)");
-					NotificationManager notificationManager =
-						(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
-					notificationManager.cancel(NOTIF_ID);
 				}
+
+				// without notificationManager.cancel(NOTIF_ID) our notification icon will not go
+				Log.d(TAG,"disconnectHost notificationManager.cancel(NOTIF_ID)");
+				NotificationManager notificationManager =
+					(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+				notificationManager.cancel(NOTIF_ID);
 
 				connectToServerIsWanted = false;
 				Log.d(TAG,"disconnectHost delayed done");

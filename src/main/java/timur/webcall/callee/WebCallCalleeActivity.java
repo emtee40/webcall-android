@@ -545,7 +545,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 					return;
 				}
 
-				Log.d(TAG, "# broadcastReceiver unknown cmd "+intent.toString());
+				//Log.d(TAG, "# broadcastReceiver unknown cmd "+intent.toString());
 			}
 		};
 		registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
