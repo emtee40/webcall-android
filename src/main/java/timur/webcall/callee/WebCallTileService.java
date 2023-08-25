@@ -159,7 +159,6 @@ public class WebCallTileService extends TileService {
 	@Override
 	public void onStopListening() {
 		super.onStopListening();
-		Log.d(TAG,"onStopListening");
 		tilesVisible = false;
 		Log.d(TAG,"onStopListening requestListeningState...");
 		requestListeningState(this, new ComponentName(this, WebCallTileService.class));

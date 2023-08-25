@@ -1881,16 +1881,19 @@ public class WebCallService extends Service {
 				disconnectHost(true);
 			}
 
-			connectToServerIsWanted = false;
-			storePrefsBoolean("connectWanted",false);
-
-			// DEACTIVE the tile
+			// deactivate the tile
 			postStatus("state", "deactivated");
-			// must also switch browser buttons to goOnline (offline mode)
 			if(myWebView!=null && webviewMainPageLoaded) {
+				// wsConn=null, reconnect stays aktiv
 				Log.d(TAG,"goOffline -> js:wsOnClose2");
 				runJS("wsOnClose2()",null);
+				// turn browser goOnlineSwitch to offline mode
+				runJS("offlineAction()",null);
 			}
+
+// TODO this may prevent notification msg to be visible in disconnectHost() above
+			connectToServerIsWanted = false;
+			storePrefsBoolean("connectWanted",false);
 		}
 	}
 
@@ -2559,8 +2562,7 @@ public class WebCallService extends Service {
 					}
 				}
 				if(myWebView!=null && webviewMainPageLoaded) {
-					// richtig: connectToServerIsWanted wird hier nicht gelöscht, reconnect bleibt aktiv
-					// falsch: disable offline-button and enable online-button
+					// reconnect stays aktiv, goOnlineSwitch stays aktiv, connectToServerIsWanted not cleared
 					runJS("wsOnClose2();",null);
 					//runJS("wsOnClose2();", new ValueCallback<String>() {
 					//	@Override
@@ -2683,6 +2685,7 @@ public class WebCallService extends Service {
 					}
 
 					if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+						Log.d(TAG,"networkState cancel reconnectSchedFuture");
 						reconnectSchedFuture.cancel(false);
 						reconnectSchedFuture = null;
 					}
@@ -3679,6 +3682,7 @@ public class WebCallService extends Service {
 
 					if(!connectToServerIsWanted) {
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 						}
 						reconnectSchedFuture = null;
@@ -3693,6 +3697,7 @@ public class WebCallService extends Service {
 						status = con.getResponseCode();
 						if(!connectToServerIsWanted) {
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+								Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 								reconnectSchedFuture.cancel(false);
 							}
 							reconnectSchedFuture = null;
@@ -3747,6 +3752,7 @@ public class WebCallService extends Service {
 
 					if(!connectToServerIsWanted) {
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 						}
 						reconnectSchedFuture = null;
@@ -3834,6 +3840,7 @@ public class WebCallService extends Service {
 					if(!connectToServerIsWanted || !reconnectBusy) {
 						// abort forced
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 						}
 						reconnectSchedFuture = null;
@@ -3916,6 +3923,7 @@ public class WebCallService extends Service {
 					if(!connectToServerIsWanted || !reconnectBusy) {
 						// abort forced
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 						}
 						reconnectSchedFuture = null;
@@ -3955,6 +3963,7 @@ public class WebCallService extends Service {
 							statusMessage("Failed to reconnect. Will try again...",-1,true,prio);
 
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+								Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 								reconnectSchedFuture.cancel(false);
 								reconnectSchedFuture = null;
 							}
@@ -3984,6 +3993,7 @@ public class WebCallService extends Service {
 					// success - wsClient is set
 
 					if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+						Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 						reconnectSchedFuture.cancel(false);
 						reconnectSchedFuture = null;
 					}
@@ -4017,6 +4027,7 @@ public class WebCallService extends Service {
 					if(!connectToServerIsWanted) {
 						// abort forced
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 						}
 						reconnectSchedFuture = null;
@@ -4046,6 +4057,7 @@ public class WebCallService extends Service {
 						statusMessage("Failed to reconnect. Will try again...",-1,true,prio);
 
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 							reconnectSchedFuture = null;
 						}
@@ -4371,6 +4383,7 @@ public class WebCallService extends Service {
 				return;
             }
             if(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+               capabilities.hasTransport(NetworkCapabilities.TRANSPORT_USB) ||
                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
 		        haveNetworkInt = 3;
 				Log.d(TAG,"checkNetworkState transport other");
@@ -4570,7 +4583,6 @@ public class WebCallService extends Service {
 			Log.d(TAG,"disconnectHost reconnectSchedFuture.cancel");
 			reconnectSchedFuture.cancel(false);
 			reconnectSchedFuture = null;
-			//statusMessage("Stopped reconnecting",-1,true,false); // manually
 		}
 
 		if(wsClient!=null) {
@@ -4593,6 +4605,7 @@ public class WebCallService extends Service {
 		}
 
 		statusMessage("Offline", -1, sendNotification, false);
+		lastStatusMessage = "";
 		postStatus("state", "disconnected");
 
 		// this is needed for wakelock and wifilock to be released
@@ -4609,27 +4622,18 @@ public class WebCallService extends Service {
 			Log.d(TAG,"disconnectHost wifiLock.release");
 			wifiLock.release();
 		}
-/*
-		scheduler.schedule(new Runnable() {
-			public void run() {
-				Log.d(TAG,"disconnectHost Exit");
-				updateNotification("Exit", false);
-				lastStatusMessage = "";
-			}
-		}, 500l, TimeUnit.MILLISECONDS);
-*/
 
 // TODO tmtmtm: should any of these unregister methods (see onDestroy()) need to be called?
 //		alarmReceiver serviceCmdReceiver networkStateReceiver
 //      powerConnectionReceiver dozeStateReceiver myNetworkCallback
 
 		// remove the Android notification
-		// we delay connectToServerIsWanted=false so that notifications of disconnectHost are still shown 
+		// we delay this so that the last notification msg ("Offline") is still shown
 		scheduler.schedule(new Runnable() {
 			public void run() {
-				removeNotification();
+				// no more notification msgs afte this
 				connectToServerIsWanted = false;
-				// TODO persist in prefs?
+				removeNotification();
 				Log.d(TAG,"disconnectHost delayed done");
 			}
 		}, 200l, TimeUnit.MILLISECONDS);
