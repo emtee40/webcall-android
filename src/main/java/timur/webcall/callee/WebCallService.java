@@ -3555,28 +3555,26 @@ public class WebCallService extends Service {
 						keepAwakeWakeLock.release();
 					}
 
-					// for very old Android releases
+					// for old Android devices: wakeUpFromDoze() may help with wifi connectivity
 					if(screenForWifiMode>0) {
 						Log.d(TAG,"reconnecter wakeUpFromDoze "+reconnectCounter);
 						wakeUpFromDoze();
 					}
 					if(beepOnLostNetworkMode>0) {
-						// TODO: while playSoundAlarm() plays, a "networkCallback network capab change" may arrive
 						playSoundAlarm();
 					}
 
+					// while playSoundAlarm() plays, a "networkCallback network capab change" may arrive
 					// we check haveNetworkInt again, bc it may have come in during playSoundAlarm()
 					if(haveNetworkInt<=0) {
 						// we pause reconnecter; if network comes back, checkNetworkState() will
 						// schedule a new reconnecter if connectToServerIsWanted is set
 						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
-//							statusMessage("No network. Waiting in standby...",-1,true,false);
-//							statusMessage("No network. Standby to connect...",-1,true,false);
-							statusMessage("No network. Standing by to re-connect...",-1,true,false);
+							statusMessage("No network. Ready to re-connect...",-1,true,false);
 
-							// we normally make the tile ACTIVE in calleeIsConnected()
-							// while we are not yet connected, we do the same here
+							// we normally activate the tile in calleeIsConnected()
+							// while we are not yet connected, we activate the tile here
 							// because we are waiting for network
 							postStatus("state","connected");
 							// we must the same with the browser buttons
@@ -3788,6 +3786,16 @@ public class WebCallService extends Service {
 							} else {
 								Log.d(TAG,"no old schedFuture to cancel");
 							}
+
+							// we normally activate the tile in calleeIsConnected()
+							// while we are not yet connected, but still reconnecting, we activate the tile also here
+							postStatus("state","connected");
+							// we must the same with the browser buttons
+							if(myWebView!=null && webviewMainPageLoaded) {
+								Log.d(TAG,"reconnecter -> js:wsOnOpen");
+								runJS("wsOnOpen()",null);
+							}
+
 							reconnectSchedFuture =
 								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
 							if(reconnectSchedFuture==null) {
@@ -3797,12 +3805,15 @@ public class WebCallService extends Service {
 							}
 							return;
 						}
-						Log.d(TAG,"reconnecter con.connect() fail. give up.");
 
+						// give up reconnector, tried often enough
+						Log.d(TAG,"reconnecter con.connect() fail. give up.");
 						postStatus("state", "disconnected");
 						postStatus("state", "deactivated");
 
 						if(reconnectBusy) {
+							// turn reconnecter off
+							reconnectBusy = false;
 							if(beepOnLostNetworkMode>0) {
 								playSoundAlarm();
 							}
@@ -3810,19 +3821,17 @@ public class WebCallService extends Service {
 							if(myWebView!=null && webviewMainPageLoaded) {
 								// offlineAction(): disable offline-button and enable online-button
 								runJS("offlineAction();",null);
+								// TODO also call JS wsOnClose2 ?
 							}
-							reconnectBusy = false;
-
-							// turn reconnecter off
-							// we delay connectToServerIsWanted=false so that notifications are still shown 
+							// we delay connectToServerIsWanted=false so that notifications will still be shown
 							final Runnable runnable2 = new Runnable() {
 								public void run() {
 									connectToServerIsWanted = false;
-									// TODO: not sure about this
+									// reconnector is now off, but should the app be restarted, it should run again
 									//storePrefsBoolean("connectWanted",false);
 								}
 							};
-							scheduler.schedule(runnable2, 600l, TimeUnit.MILLISECONDS);
+							scheduler.schedule(runnable2, 300l, TimeUnit.MILLISECONDS);
 						}
 
 						if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
@@ -3878,7 +3887,7 @@ public class WebCallService extends Service {
 								storePrefsBoolean("connectWanted",false);
 							}
 						};
-						scheduler.schedule(runnable2, 600l, TimeUnit.MILLISECONDS);
+						scheduler.schedule(runnable2, 300l, TimeUnit.MILLISECONDS);
 
 						if(myWebView!=null && webviewMainPageLoaded) {
 							// offlineAction(): disable offline-button and enable online-button

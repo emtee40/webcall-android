@@ -97,10 +97,12 @@ public class WebCallTileService extends TileService {
 								requestListeningState(context, new ComponentName(context, WebCallTileService.class));
 							}
 							updateTile(true);
+
 						} else if(state.equals("disconnected")) {
 							Log.d(TAG, "broadcastReceiver wsCon state="+state);
 							// "temporary disconnect" must NOT set button off
 							//updateTile(false);
+
 						} else if(state.equals("deactivated")) {
 							// "server giving up reconnecting" must set button off
 							Log.d(TAG, "broadcastReceiver wsCon state="+state);
@@ -109,6 +111,7 @@ public class WebCallTileService extends TileService {
 								requestListeningState(context, new ComponentName(context, WebCallTileService.class));
 							}
 							updateTile(false);
+
 						} else if(state.equals("openactivity")) {
 							// service wants us to open webcall activity and close the drawer
 							Intent webcallToFrontIntent =
