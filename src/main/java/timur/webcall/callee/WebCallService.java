@@ -3569,7 +3569,8 @@ public class WebCallService extends Service {
 						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
 //							statusMessage("No network. Waiting in standby...",-1,true,false);
-							statusMessage("No network. Standby to connect...",-1,true,false);
+//							statusMessage("No network. Standby to connect...",-1,true,false);
+							statusMessage("No network. Standing by to re-connect...",-1,true,false);
 
 							// we normally make the tile ACTIVE in calleeIsConnected()
 							// while we are not yet connected, we do the same here
