@@ -125,7 +125,7 @@ public class WebCallTileService extends TileService {
 //							}
 
 						} else {
-							Log.d(TAG, "! broadcastReceiver unknown state="+state);
+							//Log.d(TAG, "! broadcastReceiver unknown state="+state);
 						}
 					}
 				}

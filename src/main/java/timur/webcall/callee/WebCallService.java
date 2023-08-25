@@ -635,7 +635,7 @@ public class WebCallService extends Service {
 				msg = awaitingCalls;
 			}
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
-			startForeground(NOTIF_ID,buildServiceNotification("",msg,false));
+			startForeground(NOTIF_ID,buildServiceNotification(msg,false));
 		}
 /*
 		if(loginUrl!=null && scheduler!=null) {
@@ -1854,30 +1854,43 @@ public class WebCallService extends Service {
 //			} else if(haveNetworkInt<=0) {
 //				Log.d(TAG, "! goOnline() no network");
 // if we abort here, the tile icon will not be set
-			} else if(myWebView!=null && webviewMainPageLoaded) {
-				Log.d(TAG, "goOnline() -> runJS('goOnline();')");
-				runJS("goOnline(true,'service');",null);
+
+//			} else if(myWebView!=null && webviewMainPageLoaded) {
+//				Log.d(TAG, "goOnline() -> runJS('goOnline();')");
+//				runJS("goOnline(true,'service');",null);
 			} else {
 				Log.d(TAG, "goOnline() -> startReconnecter()");
 				startReconnecter(false,0);
 			}
 		}
 		public void goOffline() {
+/*
 			if(wsClient==null) {
 				Log.d(TAG, "! goOffline() already offline");
 				// may need to remove a msg like "No network. Waiting in standby..."
 				removeNotification();
-			} else if(myWebView!=null && webviewMainPageLoaded) {
+				// must also remove status msg and switch buttons (enable goOnline)
+			} else
+
+			if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG, "goOffline() -> runJS('goOffline();')");
 				runJS("goOffline('service');",null);
-			} else {
+			} else 
+*/			{
 				Log.d(TAG, "goOffline() -> disconnectHost()");
 				disconnectHost(true);
 			}
 
 			connectToServerIsWanted = false;
 			storePrefsBoolean("connectWanted",false);
+
+			// DEACTIVE the tile
 			postStatus("state", "deactivated");
+			// must also switch browser buttons to goOnline (offline mode)
+			if(myWebView!=null && webviewMainPageLoaded) {
+				Log.d(TAG,"goOffline -> js:wsOnClose2");
+				runJS("wsOnClose2()",null);
+			}
 		}
 	}
 
@@ -2088,6 +2101,15 @@ public class WebCallService extends Service {
 		}
 
 		@android.webkit.JavascriptInterface
+		public void jsGoOnline() {
+			//goOnline();
+			// called by callee.js
+			connectToServerIsWanted = true;
+			storePrefsBoolean("connectWanted",true);
+			startReconnecter(false,0);
+		}
+
+		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
 			// called from gotStream2()
 			if(calleeIsReady) {
@@ -2147,11 +2169,16 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void wsClose() {
-			// called by JS:goOffline()
+			// called by JS:goOffline() + JS:clearcache()
 			Log.d(TAG,"JS wsClose");
 
 			postStatus("state", "deactivated");
 
+// TODO tmtmtm when this is called from clearcache() (in callee.js or settings.js)
+// we must prevent disconnectHost() from doing removeNotification() -> stopForeground(true) 
+// and long async processing
+// but when clearcache() calls us, we are not able to hand over an additional parameter
+// bc such a "modern" callee.js might crash on an older (1,2,7) service
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true);
 			storePrefsBoolean("connectWanted",false);
@@ -2167,6 +2194,16 @@ public class WebCallService extends Service {
 				return 2;
 			}
 			return 0;
+		}
+
+		@android.webkit.JavascriptInterface
+		public boolean isActivityInteractive() {
+			if(myWebView!=null && webviewMainPageLoaded && activityVisible) {
+				//Log.d(TAG,"isActivityInteractive true");
+				return true;
+			}
+			//Log.d(TAG,"isActivityInteractive false");
+			return false;
 		}
 
 		@android.webkit.JavascriptInterface
@@ -3533,9 +3570,16 @@ public class WebCallService extends Service {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
 //							statusMessage("No network. Waiting in standby...",-1,true,false);
 							statusMessage("No network. Standby to connect...",-1,true,false);
-							// we are not yet connected, but we turn tile on only in calleeIsConnected()
-							// because we are waiting for network, we turn it on here
+
+							// we normally make the tile ACTIVE in calleeIsConnected()
+							// while we are not yet connected, we do the same here
+							// because we are waiting for network
 							postStatus("state","connected");
+							// we must the same with the browser buttons
+							if(myWebView!=null && webviewMainPageLoaded) {
+								Log.d(TAG,"reconnecter -> js:wsOnOpen");
+								runJS("wsOnOpen()",null);
+							}
 						} else {
 							Log.d(TAG,"reconnecter no network");
 							statusMessage("No network.",-1,true,false);
@@ -4253,7 +4297,7 @@ public class WebCallService extends Service {
 					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 						// create notificationChannel to start service in foreground
 						Log.d(TAG,"onStartCommand startForeground");
-						startForeground(NOTIF_ID,buildServiceNotification("","",false));
+						startForeground(NOTIF_ID,buildServiceNotification("",false));
 					}
 */
 					return wsClient;
@@ -4564,7 +4608,7 @@ public class WebCallService extends Service {
 			Log.d(TAG,"disconnectHost wifiLock.release");
 			wifiLock.release();
 		}
-
+/*
 		scheduler.schedule(new Runnable() {
 			public void run() {
 				Log.d(TAG,"disconnectHost Exit");
@@ -4572,7 +4616,7 @@ public class WebCallService extends Service {
 				lastStatusMessage = "";
 			}
 		}, 500l, TimeUnit.MILLISECONDS);
-
+*/
 
 // TODO tmtmtm: should any of these unregister methods (see onDestroy()) need to be called?
 //		alarmReceiver serviceCmdReceiver networkStateReceiver
@@ -4587,7 +4631,7 @@ public class WebCallService extends Service {
 				// TODO persist in prefs?
 				Log.d(TAG,"disconnectHost delayed done");
 			}
-		}, 1200l, TimeUnit.MILLISECONDS);
+		}, 200l, TimeUnit.MILLISECONDS);
 	}
 
 	private void removeNotification() {
@@ -4924,8 +4968,7 @@ public class WebCallService extends Service {
 		} else {
 			NotificationManager notificationManager =
 				(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
-			String title = "";
-			lastNotification = buildServiceNotification(title, msg, important);
+			lastNotification = buildServiceNotification(msg, important);
 			/*
 			if(msg.equals("Incoming WebCall")) {
 				Log.d(TAG,"updateNotification 'Incoming WebCall' setLights");
@@ -4935,13 +4978,13 @@ public class WebCallService extends Service {
 				notification.ledOffMS = 300;
 			}
 			*/
-			Log.d(TAG,"updateNotification title="+title+" msg="+msg);
+			Log.d(TAG,"updateNotification msg="+msg);
 			notificationManager.notify(NOTIF_ID, lastNotification);
-			//Log.d(TAG,"updateNotification title="+title+" msg="+msg+" done");
+			//Log.d(TAG,"updateNotification msg="+msg+" done");
 		}
 	}
 
-	private Notification buildServiceNotification(String title, String msg, boolean important) {
+	private Notification buildServiceNotification(String msg, boolean important) {
 		// only call with Build.VERSION.SDK_INT >= Build.VERSION_CODES.O // >= 26
 		String notifChannel = NOTIF_CHANNEL_ID_LOW;
 		if(important) {
@@ -4950,16 +4993,12 @@ public class WebCallService extends Service {
 		Intent notificationIntent = new Intent(this, WebCallCalleeActivity.class);
 		PendingIntent pendingIntent =
 			PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
-		//if(title.equals("")) {
-		//	title = "WebCall";
-		//}
 
-		//Log.d(TAG,"buildServiceNotification title="+title+" msg="+msg+" chl="+notifChannel+" !="+important);
+		//Log.d(TAG,"buildServiceNotification msg="+msg+" chl="+notifChannel+" !="+important);
 		NotificationCompat.Builder notificationBuilder =
 			new NotificationCompat.Builder(this, notifChannel)
-					//.setContentTitle(title) // 1st line
-					//.setContentText(msg) // 2nd line
 					.setContentTitle(msg) // 1st line
+					//.setContentText(msg) // 2nd line
 					.setSmallIcon(R.mipmap.notification_icon)
 					.setContentIntent(pendingIntent);
 		return notificationBuilder.build();
