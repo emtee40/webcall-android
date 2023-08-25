@@ -1351,11 +1351,13 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 		if(myNewWebView!=null) {
 			Log.d(TAG, "onDestroy myNewWebView.destroy()");
+			myNewWebView.removeAllViews();
 			myNewWebView.destroy();
 			myNewWebView=null;
 		}
 		if(myWebView!=null) {
 			Log.d(TAG, "onDestroy myWebView.destroy()");
+			myWebView.removeAllViews();
 			myWebView.destroy();
 			myWebView=null;
 			// TODO -> WebCallService: # serviceCmdReceiver skip on stopSelfFlag Intent { act=serviceCmdReceiver flg=0x10 (has extras) }
