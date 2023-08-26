@@ -20,6 +20,7 @@ import android.view.MotionEvent;
 import android.view.MenuItem;
 import android.view.ContextMenu;
 import android.view.Display;
+import android.view.ViewGroup;
 import android.view.MenuInflater;
 import android.view.inputmethod.InputMethodManager;
 import android.graphics.Color;
@@ -1351,13 +1352,23 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 		if(myNewWebView!=null) {
 			Log.d(TAG, "onDestroy myNewWebView.destroy()");
+			final ViewGroup parent = (ViewGroup)myNewWebView.getParent();
+			if(parent != null) {
+				parent.removeView(myNewWebView);
+			}
 			myNewWebView.removeAllViews();
+			// WebView.destroy() called while WebView is still attached to window
 			myNewWebView.destroy();
 			myNewWebView=null;
 		}
 		if(myWebView!=null) {
 			Log.d(TAG, "onDestroy myWebView.destroy()");
+			final ViewGroup parent = (ViewGroup)myWebView.getParent();
+			if(parent != null) {
+				parent.removeView(myWebView);
+			}
 			myWebView.removeAllViews();
+			// WebView.destroy() called while WebView is still attached to window
 			myWebView.destroy();
 			myWebView=null;
 			// TODO -> WebCallService: # serviceCmdReceiver skip on stopSelfFlag Intent { act=serviceCmdReceiver flg=0x10 (has extras) }

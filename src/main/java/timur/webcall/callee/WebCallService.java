@@ -283,6 +283,7 @@ public class WebCallService extends Service {
 
 	// dozeIdle is set by dozeStateReceiver isDeviceIdleMode() and isInteractive()
 	private static volatile boolean dozeIdle = false;
+	private static volatile long dozeIdleCounter = 0;
 
 	private static volatile boolean charging = false;
 
@@ -491,6 +492,9 @@ public class WebCallService extends Service {
 					Log.d(TAG, "serviceCmdReceiver activityVisible "+message+" connected="+(wsClient!=null));
 					if(message.equals("true")) {
 						activityVisible = true;
+						if(dozeIdleCounter>0) {
+							postDozeAction();
+						}
 					} else {
 						activityVisible = false;
 					}
@@ -993,6 +997,7 @@ public class WebCallService extends Service {
 						if(powerManager.isDeviceIdleMode()) {
 						    // the device is now in doze mode
 							dozeIdle = true;
+							dozeIdleCounter++;
 							Log.d(TAG,"dozeState idle");
 							if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
 								Log.d(TAG,"dozeState idle keepAwakeWakeLock.acquire");
@@ -1015,7 +1020,6 @@ public class WebCallService extends Service {
 							}
 							if(wsClient==null && connectToServerIsWanted) {
 								// let's go straight to reconnecter
-//								statusMessage("disconnected from webCall server...",-1,true,false);
 								statusMessage("offline",-1,true,false);
 
 								if(reconnectSchedFuture==null && !reconnectBusy) {
@@ -1041,17 +1045,7 @@ public class WebCallService extends Service {
 							Log.d(TAG,"dozeState awake screenOn="+screenOn+" doze="+dozeIdle);
 							dozeIdle = false;
 
-							if(lastStatusMessage!="") {
-								// runJS(statusMessage)) is not always executed while in doze mode
-								// so we need a method to display the last msg when we get out of doze
-
-								// TODO problem with this: that JS statusMessage() acts independent of service
-								// so lastStatusMessage is not always the last status msg
-								Log.d(TAG,"dozeState awake show lastStatusMessage="+lastStatusMessage);
-								// note: here we add a leading '!' so we can see it was executed
-								runJS("showStatus('!"+lastStatusMessage+"',-1);",null);
-								lastStatusMessage="";
-							}
+							postDozeAction();
 
 							if(screenOn) {
 								return;
@@ -5262,6 +5256,22 @@ public class WebCallService extends Service {
 			Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY |
 			Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
 		context.startActivity(webcallToFrontIntent);
+	}
+
+	private void postDozeAction() {
+		Log.d(TAG, "postDozeAction "+dozeIdleCounter+" "+lastStatusMessage);
+		dozeIdleCounter=0;
+		if(lastStatusMessage!="") {
+			// runJS(statusMessage)) is not always executed while in doze mode
+			// so we need a method to display the last msg when we get out of doze
+
+			// TODO problem with this: that JS statusMessage() acts independent of service
+			// so lastStatusMessage is not always the last status msg
+			Log.d(TAG,"postDozeAction showStatus lastStatusMessage="+lastStatusMessage);
+			// note: here we add a leading '!' so we can see it was executed
+			runJS("showStatus('!"+lastStatusMessage+"',-1);",null);
+			lastStatusMessage="";
+		}
 	}
 }
 
