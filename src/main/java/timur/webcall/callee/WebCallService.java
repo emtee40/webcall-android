@@ -2632,7 +2632,6 @@ public class WebCallService extends Service {
 
 					} else {
 						if(reconnectSchedFuture==null) {
-//							statusMessage("disconnected from WebCall server",-1,true,false);
 							statusMessage("offline",-1,true,false);
 						}
 					}
@@ -3574,8 +3573,6 @@ public class WebCallService extends Service {
 						// schedule a new reconnecter if connectToServerIsWanted is set
 						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
-//							statusMessage("No network. Ready to re-connect...",-1,true,false);
-//							statusMessage("no network, waiting to reconnect...",-1,true,false);
 							statusMessage("no network, prepared to reconnect...",-1,true,false);
 
 							// we normally activate the tile in calleeIsConnected()
@@ -3876,7 +3873,7 @@ public class WebCallService extends Service {
 						reconnectCounter = 0;
 						Log.d(TAG,"reconnecter login fail '"+wsAddr+"' give up "+reader.readLine()+
 							" "+reader.readLine()+" "+reader.readLine()+" "+reader.readLine());
-						statusMessage("gave up reconnecting. "+response,-1,true,true);
+						statusMessage("gave up reconnecting, "+response,-1,true,true);
 
 						postStatus("state", "deactivated");
 						if(wsAddr.equals("fatal") || wsAddr.equals("error") || wsAddr.equals("notregistered")) {
@@ -4084,7 +4081,7 @@ public class WebCallService extends Service {
 						if(beepOnLostNetworkMode>0) {
 							playSoundAlarm();
 						}
-						statusMessage("gave up reconnecting.",-1,true,true);
+						statusMessage("gave up reconnecting",-1,true,true);
 						if(myWebView!=null && webviewMainPageLoaded) {
 							// offlineAction(): disable offline-button and enable online-button
 							runJS("offlineAction();",null);
