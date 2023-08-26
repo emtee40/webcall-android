@@ -1282,8 +1282,8 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		super.onResume();
 
 		activityVisible = true;
-		// tell service that we are visible
-		sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
+		// tell service that we are visible (activityVisible true in onPause should be enough)
+		//sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
 
 		if(powerManager==null) {
 			Log.d(TAG, "onResume powerManager==null");

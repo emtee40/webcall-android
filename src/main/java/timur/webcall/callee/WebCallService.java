@@ -386,7 +386,9 @@ public class WebCallService extends Service {
 		}
 		if(dozeStateReceiver!=null) {
 			Log.d(TAG, "onDestroy unregisterReceiver dozeStateReceiver");
-			unregisterReceiver(dozeStateReceiver);
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+				unregisterReceiver(dozeStateReceiver);
+			}
 			dozeStateReceiver = null;
 		}
 		if(serviceCmdReceiver!=null) {
@@ -410,8 +412,6 @@ public class WebCallService extends Service {
 		connectToServerIsWanted = false; // to stop reconnecter
 		if(wsClient!=null) {
 			Log.d(TAG,"onDestroy wsClient.close()");
-//			wsClient.close();
-//			wsClient = null;
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
 			tmpWsClient.close();
@@ -475,7 +475,7 @@ public class WebCallService extends Service {
 			getSystemService(NotificationManager.class).createNotificationChannel(notificationChannel2);
 		}
 
-		// receive broadcast msgs from service and activity
+   		// receive broadcast msgs from service and activity
 		serviceCmdReceiver = new BroadcastReceiver() {
 			@Override
 			public void onReceive(Context context, Intent intent) {
@@ -494,14 +494,6 @@ public class WebCallService extends Service {
 					} else {
 						activityVisible = false;
 					}
-
-					// statusMessage() (runJS) is not always executed in doze mode
-					// here we display the lastStatusMessage again after wake from sleep
-					if(lastStatusMessage!="") {
-						runJS("showStatus('"+lastStatusMessage+"',-1);",null);
-						lastStatusMessage="";
-					}
-
 					return;
 				}
 
@@ -1048,6 +1040,19 @@ public class WebCallService extends Service {
 							boolean screenOn = isScreenOn();
 							Log.d(TAG,"dozeState awake screenOn="+screenOn+" doze="+dozeIdle);
 							dozeIdle = false;
+
+							if(lastStatusMessage!="") {
+								// runJS(statusMessage)) is not always executed while in doze mode
+								// so we need a method to display the last msg when we get out of doze
+
+								// TODO problem with this: that JS statusMessage() acts independent of service
+								// so lastStatusMessage is not always the last status msg
+								Log.d(TAG,"dozeState awake show lastStatusMessage="+lastStatusMessage);
+								// note: here we add a leading '!' so we can see it was executed
+								runJS("showStatus('!"+lastStatusMessage+"',-1);",null);
+								lastStatusMessage="";
+							}
+
 							if(screenOn) {
 								return;
 							}
@@ -1061,7 +1066,7 @@ public class WebCallService extends Service {
 								keepAwakeWakeLockStartTime = (new Date()).getTime();
 							}
 
-							wakeUpOnLoopCount(context);	// why ???
+//							wakeUpOnLoopCount(context);	// why ???
 
 							if(wsClient!=null) {
 								// close a prev connection
@@ -1093,7 +1098,7 @@ public class WebCallService extends Service {
 							}
 
 						} else if(powerManager.isPowerSaveMode()) {
-							// dozeIdle = ??? this never comes
+							// dozeIdle = ??? this never fires
 							Log.d(TAG,"dozeState powerSave mode");
 						}
 					}
@@ -1313,7 +1318,7 @@ public class WebCallService extends Service {
 					Intent intent = new Intent("webcall");
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
-						intent.putExtra("toast", "No Network?");
+						intent.putExtra("toast", "host lookup error. no network?");
 					} else if(errorCode==ERROR_UNKNOWN) {
 						Log.d(TAG, "# onReceivedError UNKNOWN "+description+" "+failingUrl);
 // TODO maybe this should not generate a toast
@@ -2154,7 +2159,8 @@ public class WebCallService extends Service {
 				logstr = logstr.substring(0,40);
 			}
 			if(wsClient==null) {
-				// THIS SHOULD NEVER HAPPEN (maybe wsConn wrongly set in client js)
+				// this may happen when service is in reconnect mode and the connection was lost
+				// and the client tries to delete an entry
 				Log.w(TAG,"# JS wsSend wsClient==null "+logstr);
 			} else {
 				if(extendedLogsFlag) {
@@ -2595,7 +2601,7 @@ public class WebCallService extends Service {
 						keepAwakeWakeLockStartTime = (new Date()).getTime();
 					}
 
-					wakeUpOnLoopCount(context);	// why???
+//					wakeUpOnLoopCount(context);	// why???
 
 					// close prev connection
 					if(wsClient!=null) {
@@ -3228,10 +3234,10 @@ public class WebCallService extends Service {
 			tmpWsClient.close();
 		}
 
-		if(haveNetworkInt<=0 && wakeIfNoNet && screenForWifiMode>0) {
-			Log.d(TAG,"startReconnecter noNetwork: wakeIfNoNet + screenForWifiMode");
-			wakeUpFromDoze();
-		}
+//		if(haveNetworkInt<=0 && wakeIfNoNet && screenForWifiMode>0) {
+//			Log.d(TAG,"startReconnecter noNetwork: wakeIfNoNet + screenForWifiMode");
+//			wakeUpFromDoze();
+//		}
 
 		if(!reconnectBusy) {
 			setLoginUrl();
@@ -3442,6 +3448,7 @@ public class WebCallService extends Service {
 		}
 	}
 
+/*
 	private void wakeUpFromDoze() {
 		// this is for wakeing up WIFI; if wifi is switched off, doing this does not make sense
 		if(wifiManager.isWifiEnabled()==false) {
@@ -3493,6 +3500,7 @@ public class WebCallService extends Service {
 		wakeUpWakeLock.acquire(10 * 1000);
 		// will be released by activity after 3s by calling releaseWakeUpWakeLock()
 	}
+*/
 
 	private void clearCookies() {
 		Log.d(TAG,"clearCookies");
@@ -3536,7 +3544,7 @@ public class WebCallService extends Service {
 				reconnectBusy = true;
 				Log.d(TAG,"reconnecter start "+reconnectCounter+" net="+haveNetworkInt+" "+
 					currentDateTimeString());
-				wakeUpOnLoopCount(context);
+//				wakeUpOnLoopCount(context);
 				reconnectCounter++;
 
 				if(haveNetworkInt<=0) {
@@ -3551,11 +3559,11 @@ public class WebCallService extends Service {
 						keepAwakeWakeLock.release();
 					}
 
-					// for old Android devices: wakeUpFromDoze() may help with wifi connectivity
-					if(screenForWifiMode>0) {
-						Log.d(TAG,"reconnecter wakeUpFromDoze "+reconnectCounter);
-						wakeUpFromDoze();
-					}
+//					// for old Android devices: wakeUpFromDoze() may help with wifi connectivity
+//					if(screenForWifiMode>0) {
+//						Log.d(TAG,"reconnecter wakeUpFromDoze "+reconnectCounter);
+//						wakeUpFromDoze();
+//					}
 					if(beepOnLostNetworkMode>0) {
 						playSoundAlarm();
 					}
@@ -4736,6 +4744,7 @@ public class WebCallService extends Service {
 		}
 	}
 
+/*
 	private void wakeUpOnLoopCount(Context context) {
 		// when reconnecter keeps looping without getting connected we are probably in doze mode
 		// at loop number ReconnectCounterBeep we want to create a beep
@@ -4765,7 +4774,7 @@ public class WebCallService extends Service {
 			}
 		}
 	}
-
+*/
 	private boolean isScreenOn() {
 		for(Display display : displayManager.getDisplays()) {
 			//Log.d(TAG,"isScreenOff state="+display.getState());
