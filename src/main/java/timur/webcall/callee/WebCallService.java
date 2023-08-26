@@ -513,7 +513,6 @@ public class WebCallService extends Service {
 					// stop secondary wakeIntents from rtcConnect()
 					peerDisconnnectFlag = true;
 
-					// close the notification by sending a new not-high-priority notification
 					updateNotification(awaitingCalls,false);
 
 					// disconnect caller / stop ringing
@@ -1892,7 +1891,7 @@ public class WebCallService extends Service {
 				runJS("offlineAction()",null);
 			}
 
-// TODO this may prevent notification msg to be visible in disconnectHost() above
+			// TODO this may prevent notification msg to be visible in disconnectHost() above
 			connectToServerIsWanted = false;
 			storePrefsBoolean("connectWanted",false);
 		}
@@ -2178,11 +2177,6 @@ public class WebCallService extends Service {
 
 			postStatus("state", "deactivated");
 
-// TODO tmtmtm when this is called from clearcache() (in callee.js or settings.js)
-// we must prevent disconnectHost() from doing removeNotification() -> stopForeground(true) 
-// and long async processing
-// but when clearcache() calls us, we are not able to hand over an additional parameter
-// bc such a "modern" callee.js might crash on an older (1,2,7) service
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true);
 			storePrefsBoolean("connectWanted",false);
@@ -2381,7 +2375,7 @@ public class WebCallService extends Service {
 			endPeerConAndWebView();
 
 			// disconnect from webcall server
-			Log.d(TAG,"JS wsExit disconnectHost()");
+			Log.d(TAG,"JS wsExit -> disconnectHost()");
 			disconnectHost(true);
 
 			// tell activity to force close
@@ -4616,6 +4610,7 @@ public class WebCallService extends Service {
 		}
 
 		statusMessage("offline", -1, sendNotification, false);
+// TODO explain why we do this
 		lastStatusMessage = "";
 		postStatus("state", "disconnected");
 
@@ -4945,16 +4940,21 @@ public class WebCallService extends Service {
 	private void statusMessage(String msg, int timeoutMs, boolean notifi, boolean important) {
 		// webcall status msg + android notification (if notifi + important are true)
 		//Log.d(TAG,"statusMessage: "+msg+" n="+notifi+" i="+important);
+/*
 		if(msg.equals(lastStatusMessage)) {
+// TODO: lastStatusMessage must be cleared when JS code calls showStatus()
+// or this must be handled in JS code
+			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip same as lastStatusMessage");
 			return;
 		}
+*/
 		lastStatusMessage = "";
 		if(myWebView==null) {
 //			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip no webview");
 		} else if(!webviewMainPageLoaded) {
 //			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip notOnMainPage");
 		} else if(msg=="") {
-//			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip msg empty");
+//			Log.d(TAG,"! statusMessage: "+msg+" n="+notifi+" i="+important+" skip empty msg");
 		} else {
 			// encodedMsg MUST NOT contain apostrophe
 			String encodedMsg = msg.replace("'", "&#39;");
