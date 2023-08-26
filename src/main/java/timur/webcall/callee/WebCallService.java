@@ -1865,7 +1865,7 @@ public class WebCallService extends Service {
 //				runJS("goOnline(true,'service');",null);
 			} else {
 				Log.d(TAG, "goOnline() -> startReconnecter()");
-				startReconnecter(false,0);
+				startReconnecter(false,0); // wakeIfNoNet=false, reconnectDelaySecs=0
 			}
 		}
 		public void goOffline() {
@@ -2114,7 +2114,7 @@ public class WebCallService extends Service {
 			// called by callee.js
 			connectToServerIsWanted = true;
 			storePrefsBoolean("connectWanted",true);
-			startReconnecter(false,0);
+			startReconnecter(false,0); // wakeIfNoNet=false, reconnectDelaySecs=0
 		}
 
 		@android.webkit.JavascriptInterface
