@@ -3571,7 +3571,8 @@ public class WebCallService extends Service {
 						// schedule a new reconnecter if connectToServerIsWanted is set
 						if(connectToServerIsWanted) {
 							Log.d(TAG,"reconnecter no network, reconnect paused...");
-							statusMessage("No network. Ready to re-connect...",-1,true,false);
+//							statusMessage("No network. Ready to re-connect...",-1,true,false);
+							statusMessage("No network. Waiting to reconnect...",-1,true,false);
 
 							// we normally activate the tile in calleeIsConnected()
 							// while we are not yet connected, we activate the tile here
