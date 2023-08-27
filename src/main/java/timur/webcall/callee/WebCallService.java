@@ -2859,7 +2859,7 @@ public class WebCallService extends Service {
 					notificationManager.notify(NOTIF_ID, notification);
 
 					// send log RING
-					String ringMsg = "log|callee Incoming xxx/xxx";
+					String ringMsg = "log|callee Incoming ?/?";
 					Log.d(TAG,"wsClient.send RING-log "+ringMsg);
 					try {
 						wsClient.send(ringMsg);
