@@ -1284,7 +1284,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 
 		activityVisible = true;
 		// tell service that we are visible (activityVisible true in onPause should be enough)
-		//sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
+		sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
 
 		if(powerManager==null) {
 			Log.d(TAG, "onResume powerManager==null");
@@ -1357,7 +1357,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				parent.removeView(myNewWebView);
 			}
 			myNewWebView.removeAllViews();
-			// WebView.destroy() called while WebView is still attached to window
+			//myNewWebView.clearCache(true);
 			myNewWebView.destroy();
 			myNewWebView=null;
 		}
@@ -1368,7 +1368,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				parent.removeView(myWebView);
 			}
 			myWebView.removeAllViews();
-			// WebView.destroy() called while WebView is still attached to window
+			//myWebView.clearCache(true);
 			myWebView.destroy();
 			myWebView=null;
 			// TODO -> WebCallService: # serviceCmdReceiver skip on stopSelfFlag Intent { act=serviceCmdReceiver flg=0x10 (has extras) }
@@ -1443,6 +1443,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			if(connectType>0) {
 				// service is connected to webcall server (1,2) or reconnecting (3)
 
+				// isRinging() is set by callee.js via JS ringStart()
 				if(webCallServiceBinder.isRinging()) {
 					Log.d(TAG, "onBackPressed connectType="+connectType+" + isRinging -> deny moveTaskToBack()");
 					return;
