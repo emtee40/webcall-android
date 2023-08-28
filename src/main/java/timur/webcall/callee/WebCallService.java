@@ -612,7 +612,7 @@ public class WebCallService extends Service {
 
 	@Override
 	public int onStartCommand(Intent onStartIntent, int flags, int startId) {
-		Log.d(TAG,"onStartCommand "+loginUrl+" connected="+(wsClient!=null));
+		Log.d(TAG,"onStartCommand loginUrl="+loginUrl+" connected="+(wsClient!=null));
 		context = this;
 
 		if(connectivityManager==null) {
@@ -627,7 +627,7 @@ public class WebCallService extends Service {
 		// note: haveNetworkInt keeps its old value through exitService() !!!
 		int oldHaveNetworkInt = haveNetworkInt;
 		checkNetworkState(false); // will set haveNetworkInt
-		Log.d(TAG,"onStartCommand haveNetworkInt="+haveNetworkInt+" ("+oldHaveNetworkInt+")");
+		Log.d(TAG,"onStartCommand haveNetworkInt="+haveNetworkInt+" (old="+oldHaveNetworkInt+")");
 
 		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 			// create notificationChannel to start service in foreground
@@ -2822,6 +2822,7 @@ public class WebCallService extends Service {
 							.setSmallIcon(R.mipmap.notification_icon)
 							.setContentTitle("Incoming WebCall")
 							.setCategory(NotificationCompat.CATEGORY_CALL)
+							.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 							//.setLights(0xff00ff00, 300, 100)			// TODO does not seem to work on N7
 
 							// on O+ setPriority is ignored in favor of NOTIF_CHANNEL_ID_HIGH
@@ -5051,6 +5052,7 @@ public class WebCallService extends Service {
 					.setContentTitle(msg) // 1st line
 					//.setContentText(msg) // 2nd line
 					.setSmallIcon(R.mipmap.notification_icon)
+					.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 					.setContentIntent(pendingIntent);
 		return notificationBuilder.build();
 	}

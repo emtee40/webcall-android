@@ -171,7 +171,7 @@ public class WebCallTileService extends TileService {
 	@Override
 	public void onClick() {
 		super.onClick();
-		Log.d(TAG,"onClick...");
+		Log.d(TAG,"onClick..."+isSecure());
 
 		if(webCallServiceBinder==null) {
 			long delayMS = 100l;
