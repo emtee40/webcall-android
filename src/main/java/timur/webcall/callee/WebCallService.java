@@ -1881,7 +1881,7 @@ public class WebCallService extends Service {
 			} else 
 */			{
 				Log.d(TAG, "goOffline() -> disconnectHost()");
-				disconnectHost(true);
+				disconnectHost(true,false); // sendNotif skipStopForeground
 			}
 
 			// deactivate the tile
@@ -1894,7 +1894,6 @@ public class WebCallService extends Service {
 				runJS("offlineAction()",null);
 			}
 
-			// TODO this may prevent notification msg to be visible in disconnectHost() above
 			connectToServerIsWanted = false;
 			storePrefsBoolean("connectWanted",false);
 		}
@@ -2185,14 +2184,30 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void wsClose() {
-			// called by JS:goOffline() + JS:clearcache()
+			// called by JS:goOffline()
 			Log.d(TAG,"JS wsClose");
 
 			postStatus("state", "deactivated");
 
 			// wsClient.closeBlocking() + wsClient=null
-			disconnectHost(true);
+			disconnectHost(true,false); // sendNotif skipStopForeground
+
 			storePrefsBoolean("connectWanted",false);
+			Log.d(TAG,"JS wsClose done");
+		}
+
+		@android.webkit.JavascriptInterface
+		public void wsClosex() {
+			// called by JS:clearcache()
+			Log.d(TAG,"JS wsClosex");
+
+			//postStatus("state", "deactivated");
+
+			// wsClient.closeBlocking() + wsClient=null
+			disconnectHost(true,true); // sendNotif skipStopForeground
+
+			// TODO this is wrong if used for clearCache+reload
+			//storePrefsBoolean("connectWanted",false);
 			Log.d(TAG,"JS wsClose done");
 		}
 
@@ -2389,7 +2404,7 @@ public class WebCallService extends Service {
 
 			// disconnect from webcall server
 			Log.d(TAG,"JS wsExit -> disconnectHost()");
-			disconnectHost(true);
+			disconnectHost(true,false); // sendNotif skipStopForeground
 
 			// tell activity to force close
 			Log.d(TAG,"JS wsExit shutdown activity");
@@ -4613,7 +4628,7 @@ public class WebCallService extends Service {
 */
 	}
 
-	private void disconnectHost(boolean sendNotification) {
+	private void disconnectHost(boolean sendNotification, boolean skipStopForeground) {
 		// called by wsClose() and wsExit()
 		Log.d(TAG,"disconnectHost...");
 
@@ -4651,6 +4666,9 @@ public class WebCallService extends Service {
 		}
 
 		statusMessage("Offline", -1, sendNotification, false);
+		// TODO this did not change the state of the online/offline buttons/switch
+		//      is also useless for the clearCache+reload use case
+
 		// clear the "offline" msg from lastStatusMessage, so that it will not be pulled and shown from postDozeAction()
 		lastStatusMessage = "";
 		postStatus("state", "disconnected");
@@ -4674,16 +4692,18 @@ public class WebCallService extends Service {
 //		alarmReceiver serviceCmdReceiver networkStateReceiver
 //      powerConnectionReceiver dozeStateReceiver myNetworkCallback
 
-		// remove the Android notification
-		// we delay this so that the last notification msg ("Offline") is still shown
-		scheduler.schedule(new Runnable() {
-			public void run() {
-				// no more notification msgs afte this
-				connectToServerIsWanted = false;
-				removeNotification();
-				Log.d(TAG,"disconnectHost delayed done");
-			}
-		}, 200l, TimeUnit.MILLISECONDS);
+		if(!skipStopForeground) {
+			// remove the Android notification
+			// we delay this so that the last notification msg ("Offline") is still shown
+			scheduler.schedule(new Runnable() {
+				public void run() {
+					// no more notification msgs afte this
+					connectToServerIsWanted = false;
+					removeNotification();
+					Log.d(TAG,"disconnectHost delayed done");
+				}
+			}, 200l, TimeUnit.MILLISECONDS);
+		}
 	}
 
 	private void removeNotification() {
