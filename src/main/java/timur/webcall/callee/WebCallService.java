@@ -4645,7 +4645,7 @@ public class WebCallService extends Service {
 		}
 
 		statusMessage("offline", -1, sendNotification, false);
-// TODO explain why we do this
+		// clear the "offline" msg from lastStatusMessage, so that it will not be pulled and shown from postDozeAction()
 		lastStatusMessage = "";
 		postStatus("state", "disconnected");
 
@@ -5293,7 +5293,7 @@ public class WebCallService extends Service {
 	}
 
 	private void postDozeAction() {
-		Log.d(TAG, "postDozeAction "+dozeIdleCounter+" "+lastStatusMessage);
+		Log.d(TAG, "postDozeAction dozeIdleCounter="+dozeIdleCounter+" ("+lastStatusMessage+")");
 		dozeIdleCounter=0;
 		if(lastStatusMessage!="") {
 			// runJS(statusMessage)) is not always executed while in doze mode
