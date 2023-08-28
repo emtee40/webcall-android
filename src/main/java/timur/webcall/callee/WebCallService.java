@@ -509,7 +509,7 @@ public class WebCallService extends Service {
 
 				message = intent.getStringExtra("denyCall");
 				if(message!=null && message!="") {
-					// user responded to the call-notification dialog by denying the call
+					// user responded to the call-notification dialog by rejecting the call
 					Log.d(TAG, "serviceCmdReceiver denyCall "+message);
 
 					// stop secondary wakeIntents from rtcConnect()
@@ -520,8 +520,8 @@ public class WebCallService extends Service {
 					// disconnect caller / stop ringing
 					if(wsClient==null) {
 						Log.w(TAG,"# serviceCmdReceiver denyCall wsClient==null");
-					} else if(webviewMainPageLoaded) {
-						Log.w(TAG,"serviceCmdReceiver denyCall runJS('hangup()')");
+					} else if(myWebView!=null && webviewMainPageLoaded) {
+						Log.w(TAG,"serviceCmdReceiver denyCall runJS('hangup(musthangup,,userReject)')");
 						runJS("hangup(true,true,'userReject')",null);
 					} else {
 						try {
@@ -2472,7 +2472,7 @@ public class WebCallService extends Service {
 		public boolean ringStop() {
 			ringFlag = false;
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-				stopRinging("JS");
+				stopRinging("JS"); // from callee.js stopAllAudioEffects()
 				return true;
 			}
 			return false;
@@ -3205,11 +3205,11 @@ public class WebCallService extends Service {
 	private void stopRinging(String comment) {
 		// stop playing the ringtone
 		if(mediaPlayer!=null) {
-			Log.d(TAG,"stopRinging ("+comment+")");
+			Log.d(TAG,"stopRinging from=("+comment+")");
 			mediaPlayer.stop();
 			mediaPlayer = null;
 		} else {
-			//Log.d(TAG,"stopRinging (was not active), from "+comment);
+			Log.d(TAG,"stopRinging (was not active), from="+comment);
 		}
 	}
 
