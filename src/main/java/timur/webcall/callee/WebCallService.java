@@ -2153,6 +2153,14 @@ public class WebCallService extends Service {
 		}
 
 		@android.webkit.JavascriptInterface
+		public void clearLastStatus() {
+			if(extendedLogsFlag) {
+				Log.d(TAG,"JS clearLastStatus()");
+			}
+			lastStatusMessage="";
+		}
+
+		@android.webkit.JavascriptInterface
 		public void wsSend(String str) {
 			String logstr = str;
 			if(logstr.length()>40) {
