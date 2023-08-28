@@ -2208,7 +2208,7 @@ public class WebCallService extends Service {
 
 			// TODO this is wrong if used for clearCache+reload
 			//storePrefsBoolean("connectWanted",false);
-			Log.d(TAG,"JS wsClose done");
+			Log.d(TAG,"JS wsClosex done");
 		}
 
 		@android.webkit.JavascriptInterface
@@ -2255,7 +2255,7 @@ public class WebCallService extends Service {
 		public void wsClearCache(final boolean autoreload, final boolean autoreconnect) {
 			// used by webcall.js + callee.js (clearcache())
 			if(myWebView!=null) {
-				Log.d(TAG,"JS wsClearCache clearCache()");
+				Log.d(TAG,"JS wsClearCache clearCache() "+autoreload+" "+autoreconnect);
 				myWebView.post(new Runnable() {
 					@Override
 					public void run() {
@@ -2881,7 +2881,9 @@ public class WebCallService extends Service {
 					notificationManager.notify(NOTIF_ID, notification);
 
 					// send log RING
-					String ringMsg = "log|callee Incoming ?/?";
+					String ringMsg = "log|callee Incoming /";
+					// do this later when all deployed server can cope without 3rd arg
+					//String ringMsg = "log|callee Incoming";
 					Log.d(TAG,"wsClient.send RING-log "+ringMsg);
 					try {
 						wsClient.send(ringMsg);
@@ -4630,7 +4632,7 @@ public class WebCallService extends Service {
 
 	private void disconnectHost(boolean sendNotification, boolean skipStopForeground) {
 		// called by wsClose() and wsExit()
-		Log.d(TAG,"disconnectHost...");
+		Log.d(TAG,"disconnectHost "+sendNotification+" "+skipStopForeground);
 
 		calleeIsReady = false;
 		if(pendingAlarm!=null) {

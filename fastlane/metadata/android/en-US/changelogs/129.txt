@@ -1,14 +1,13 @@
 WebCall for Android 1.4.5
-on WebCall Server 4.0.0
-- user customizable IDs
-- new quick setting tile
-- faster Wifi/Mobile handover
-- faster call disconnect
+WebCall Server 4.0
+- custom IDs
+- quick setting tile
+- quick Wifi/Mobile handover
+- quick call disconnect
 - robust connectivity
-- super low power consumption
-- improved UI, better Textchat sound
-- bugfixes: data-channel, no network, webview version,
+- low power consumption
+- improved UI, better graphics and sound
+- notification support for Android 5.0-13.0
+- many bugfixes: data-channel, no network, webview version,
     clearCookies, main page overflow fix, blank status fix,
-    notification support for Android 5.0-13.0
-
 
