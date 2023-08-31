@@ -888,6 +888,7 @@ public class WebCallService extends Service {
 					*/
 					// we could do the above: if(netInfo.getType() == ConnectivityManager.TYPE_WIFI)
 					// but we trust our haveNetworkInt to have our old state
+/*
 					if(haveNetworkInt==2) {
 						Log.d(TAG,"networkCallback onLost Wifi");
 						statusMessage("Wifi network lost",-1,true,false);
@@ -898,7 +899,7 @@ public class WebCallService extends Service {
 						Log.d(TAG,"networkCallback onLost "+haveNetworkInt);
 						statusMessage("Network lost",-1,true,false);
 					}
-
+*/
 					int oldNetworkInt = haveNetworkInt;
 					haveNetworkInt = 0;
 
@@ -937,7 +938,7 @@ public class WebCallService extends Service {
 							" vpn="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_VPN)+
 							" wifiAw="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE)+
 							" usb="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_USB));
-
+/*
 						if(haveNetworkInt<=0) {
 							// no new network, only lost a network
 							if(oldNetworkInt==2) {
@@ -951,9 +952,10 @@ public class WebCallService extends Service {
 								statusMessage("Network lost",-1,true,false);
 							}
 						}
+*/
 					}
 
-					if(haveNetworkInt>0 && haveNetworkInt!=oldNetworkInt) {
+					if(/*haveNetworkInt>0 &&*/ haveNetworkInt!=oldNetworkInt) {
 						networkChange(haveNetworkInt,oldNetworkInt,"capabChange");
 					}
 					lock.unlock();
@@ -5192,7 +5194,6 @@ public class WebCallService extends Service {
 	private void networkChange(int newNetworkInt, int oldNetworkInt, String comment) {
 		// called by onAvailable() or onCapabilitiesChanged()
 		Log.d(TAG,"networkChange start "+comment+" old="+oldNetworkInt+" new="+newNetworkInt);
-//		boolean mustReconnectOnNetworkChange = false;
 		if(newNetworkInt!=2 /*&& oldNetworkInt==2*/) {
 			// lost wifi
 			if(wifiLock!=null && wifiLock.isHeld()) {
@@ -5201,124 +5202,99 @@ public class WebCallService extends Service {
 				wifiLock.release();
 			}
 		}
-/*
-		if(newNetworkInt==1 && oldNetworkInt!=1) {
-			// gained mobile
-			if(connectToServerIsWanted) {
-				statusMessage("Using mobile network",-1,false,false);
-//				mustReconnectOnNetworkChange = true;
-			} else {
-				Log.d(TAG,"networkChange mobile but conWant==false");
-			}
-		} else if(newNetworkInt==2 && oldNetworkInt!=2) {
-			// gained wifi
-			statusMessage("Using Wifi network",-1,false,false);
-			if(connectToServerIsWanted) {
-				// lock wifi if required
-				if(setWifiLockMode<=0) {
-					// prefer wifi not enabled by user
-					Log.d(TAG,"networkChange gainWifi WifiLockMode off");
-				} else if(wifiLock==null) {
-					Log.d(TAG,"# networkChange gainWifi wifiLock==null");
-				} else if(wifiLock.isHeld()) {
-					Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
-				} else {
-					// enable wifi lock
-					Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
-					wifiLock.acquire();
-				}
-//				mustReconnectOnNetworkChange = true;
-			} else {
-				Log.d(TAG,"networkChange gainWifi but conWant==false");
-			}
-		} else if(newNetworkInt==3 && oldNetworkInt!=3) {
-			// gained other net
-			if(connectToServerIsWanted) {
-//				statusMessage("Using other network",-1,false,false);
-//				mustReconnectOnNetworkChange = true;
-			} else {
-				Log.d(TAG,"networkChange gainOther but conWant==false");
-			}
-		}
-*/
 
-		// start reconnecter (independent of whether we have a network or not)
-		if(!connectToServerIsWanted) {
-			Log.d(TAG,"networkChange abort conWant==false");
-		} else if(reconnectBusy) {
-			Log.d(TAG,"networkChange abort reconnectBusy");
+		if(newNetworkInt<=0 && oldNetworkInt>0) {
+			// lost network
+			if(oldNetworkInt==2) {
+				Log.d(TAG,"networkChange lost Wifi");
+				statusMessage("Wifi network lost",-1,true,false);
+			} else if(oldNetworkInt==1) {
+				Log.d(TAG,"networkChange lost mobile");
+				statusMessage("Mobile network lost",-1,true,false);
+			} else {
+				Log.d(TAG,"networkChange lost "+haveNetworkInt);
+				statusMessage("Network lost",-1,true,false);
+			}
 		} else {
-			Log.d(TAG,"networkChange start...");
-			if(newNetworkInt==2) {
-				statusMessage("Reconnect Wifi...",-1,true,false);
-				if(oldNetworkInt!=2) {
-					if(setWifiLockMode<=0) {
-						// prefer wifi not enabled by user
-						Log.d(TAG,"networkChange gainWifi WifiLockMode off");
-					} else if(wifiLock==null) {
-						Log.d(TAG,"# networkChange gainWifi wifiLock==null");
-					} else if(wifiLock.isHeld()) {
-						Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
+			// gained network
+			if(!connectToServerIsWanted || reconnectBusy) {
+				if(newNetworkInt>0 && newNetworkInt!=oldNetworkInt) {
+					if(newNetworkInt==2) {
+						Log.d(TAG,"networkChange gained Wifi");
+						statusMessage("Wifi network found",-1,true,false);
+					} else if(newNetworkInt==1) {
+						Log.d(TAG,"networkChange gained mobile");
+						statusMessage("Mobile network found",-1,true,false);
 					} else {
-						// enable wifi lock
-						Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
-						wifiLock.acquire();
+						Log.d(TAG,"networkChange gained "+newNetworkInt);
+						statusMessage("Network found",-1,true,false);
 					}
 				}
-			} else if(newNetworkInt==1) {
-				statusMessage("Reconnect Mobile...",-1,true,false);
-			} else if(newNetworkInt>0) {
-				statusMessage("Reconnect...",-1,true,false);
-			} else {
-				// this would overwrite the 'network lost' msg
-				//statusMessage("Reconnect...",-1,true,false);
-			}
-
-			// we need keepAwake to manage the reconnect
-			if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
-				Log.d(TAG,"networkChange keepAwakeWakeLock.acquire");
-				keepAwakeWakeLock.acquire(3 * 60 * 1000);
-				keepAwakeWakeLockStartTime = (new Date()).getTime();
-			}
-
-			if(wsClient!=null) {
-				// disconnect old connection to avoid server re-login denial ("already/still logged in")
-				// note: this may cause: onClose code=1000 ("normal closure")
-/*
-				Log.d(TAG,"networkChange close old connection");
-				//wsClient.close();
-				//wsClient = null;
-				WebSocketClient tmpWsClient = wsClient;
-				wsClient = null;
-				try {
-					tmpWsClient.close();
-				} catch(Exception ex) {
-					Log.d(TAG,"networkChange old connection close ex="+ex.toString());
-				} finally {
-					Log.d(TAG,"networkChange old connection closed");
-				}
-*/
-				closeWsClient(false, "networkChange");
-			}
-
-			// call scheduler.schedule()
-			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-				// we don't want to wait more than 3s
-				// but we also don't want to wait less than 3s
-				//   so that server has enough time to detect this disconnect
-
-				// why wait for the scheduled reconnecter job
-				// let's cancel it and start in 3s from now
-				// (3s, so that the server has enough time to detect the disconnect)
-				Log.d(TAG,"networkChange cancel reconnectSchedFuture");
-				if(reconnectSchedFuture.cancel(false)) {
-					// next run reconnecter
-					Log.d(TAG,"networkChange restart reconnecter in 3s");
-					reconnectSchedFuture = scheduler.schedule(reconnecter, 3 ,TimeUnit.SECONDS);
+				if(!connectToServerIsWanted) {
+					Log.d(TAG,"networkChange abort conWant==false");
+				} else if(reconnectBusy) {
+					Log.d(TAG,"networkChange abort reconnectBusy");
 				}
 			} else {
-				Log.d(TAG,"networkChange start reconnecter in 3s");
-				reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
+				// start reconnecter (independent of whether we have a network or not)
+				Log.d(TAG,"networkChange start...");
+				if(newNetworkInt==2) {
+					statusMessage("Reconnect Wifi...",-1,true,false);
+					if(oldNetworkInt!=2) {
+						if(setWifiLockMode<=0) {
+							// prefer wifi not enabled by user
+							Log.d(TAG,"networkChange gainWifi WifiLockMode off");
+						} else if(wifiLock==null) {
+							Log.d(TAG,"# networkChange gainWifi wifiLock==null");
+						} else if(wifiLock.isHeld()) {
+							Log.d(TAG,"networkChange gainWifi wifiLock isHeld already");
+						} else {
+							// enable wifi lock
+							Log.d(TAG,"networkChange gainWifi wifiLock.acquire");
+							wifiLock.acquire();
+						}
+					}
+				} else if(newNetworkInt==1) {
+					statusMessage("Reconnect Mobile...",-1,true,false);
+				} else if(newNetworkInt>0) {
+					statusMessage("Reconnect...",-1,true,false);
+				} else {
+					// this would overwrite the 'network lost' msg
+					//statusMessage("Reconnect...",-1,true,false);
+				}
+
+				// we need keepAwake to manage the reconnect
+				if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
+					Log.d(TAG,"networkChange keepAwakeWakeLock.acquire");
+					keepAwakeWakeLock.acquire(3 * 60 * 1000);
+					keepAwakeWakeLockStartTime = (new Date()).getTime();
+				}
+
+				if(wsClient!=null) {
+					// disconnect old connection to avoid server re-login denial ("already/still logged in")
+					// note: this may cause: onClose code=1000 ("normal closure")
+					closeWsClient(false, "networkChange");
+				}
+
+				// call scheduler.schedule()
+				if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+					// we don't want to wait more than 3s
+					// but we also don't want to wait less than 3s
+					//   so that server has enough time to detect this disconnect
+
+					// why wait for the scheduled reconnecter job
+					// let's cancel it and start in 3s from now
+					// (3s, so that the server has enough time to detect the disconnect)
+					Log.d(TAG,"networkChange cancel reconnectSchedFuture");
+					if(reconnectSchedFuture.cancel(false)) {
+						// next run reconnecter
+						Log.d(TAG,"networkChange restart reconnecter in 3s");
+						reconnectSchedFuture = scheduler.schedule(reconnecter, 3 ,TimeUnit.SECONDS);
+					}
+				} else {
+					Log.d(TAG,"networkChange start reconnecter in 3s");
+					reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
+				}
 			}
 		}
 	}
