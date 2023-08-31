@@ -1603,7 +1603,6 @@ public class WebCallService extends Service {
 			});
 
 			// let JS call java service code
-//			webCallJSInterface = new WebCallJSInterface();
 			myWebView.addJavascriptInterface(webCallJSInterface, "Android");
 
 			// render base page - or main page if we are connected already
