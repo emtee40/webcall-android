@@ -323,8 +323,8 @@ public class WebCallService extends Service {
 	private static volatile String textmode = "";
 	private static volatile String lastStatusMessage = "";
 	private static volatile Notification lastNotification = null;
+	private static volatile WebView myWebView = null;
 
-	private volatile WebView myWebView = null;
 	private volatile WebCallJSInterface webCallJSInterface = new WebCallJSInterface();
 	private volatile WebCallJSInterfaceMini webCallJSInterfaceMini = new WebCallJSInterfaceMini();
 
@@ -413,10 +413,13 @@ public class WebCallService extends Service {
 		}
 		connectToServerIsWanted = false; // to stop reconnecter
 		if(wsClient!=null) {
+/*
 			Log.d(TAG,"onDestroy wsClient.close()");
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
 			tmpWsClient.close();
+*/
+			closeWsClient(false, "onDestroy");
 		}
 		if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
 			Log.d(TAG,"onDestroy keepAwakeWakeLock.release");
@@ -483,7 +486,7 @@ public class WebCallService extends Service {
 			public void onReceive(Context context, Intent intent) {
 				//Log.d(TAG, "serviceCmdReceiver "+intent.toString());
 				if(stopSelfFlag) {
-					Log.d(TAG,"# serviceCmdReceiver skip on stopSelfFlag "+intent.toString());
+					Log.d(TAG,"! serviceCmdReceiver skip on stopSelfFlag "+intent.toString());
 					return;
 				}
 
@@ -636,21 +639,15 @@ public class WebCallService extends Service {
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
 			startForeground(NOTIF_ID,buildServiceNotification(msg,false));
 		}
-/*
-		if(loginUrl!=null && scheduler!=null) {
-			// no new init needed
-			Log.d(TAG,"onStartCommand loginUrl and scheduler set, return START_STICKY");
-			return START_STICKY;
-		}
-*/
+
 		if(batteryStatusfilter==null) {
 			batteryStatusfilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
 			//batteryStatus = context.registerReceiver(null, batteryStatusfilter);
 		}
 
 		if(scheduler==null) {
-			Log.d(TAG,"onStartCommand Executors.newScheduledThreadPool(20)");
-			scheduler = Executors.newScheduledThreadPool(20);
+			Log.d(TAG,"onStartCommand Executors.newScheduledThreadPool(10)");
+			scheduler = Executors.newScheduledThreadPool(10);
 		}
 		if(scheduler==null) {
 			Log.d(TAG,"# onStartCommand fatal cannot create scheduledThreadPool");
@@ -1068,6 +1065,7 @@ public class WebCallService extends Service {
 
 							if(wsClient!=null) {
 								// close a prev connection
+/*
 								Log.d(TAG,"dozeState awake wsClient.closeBlocking()...");
 								WebSocketClient tmpWsClient = wsClient;
 								wsClient = null;
@@ -1076,6 +1074,8 @@ public class WebCallService extends Service {
 								} catch(Exception ex) {
 									Log.d(TAG,"dozeState awake closeBlocking ex="+ex);
 								}
+*/
+								closeWsClient(true, "dozeState awake");
 							} else {
 								Log.d(TAG,"dozeState awake wsClient==null");
 							}
@@ -1253,8 +1253,8 @@ public class WebCallService extends Service {
 			//Log.d(TAG, "done webSettings "+webSettings.getSaveFormData());
 
 			myWebView.setDownloadListener(new DownloadListener() {
-                @Override
-                public void onDownloadStart(String url, String userAgent,
+		        @Override
+		        public void onDownloadStart(String url, String userAgent,
 						String contentDisposition, String mimetype, long contentLength) {
 					Log.d(TAG,"DownloadListener url="+url+" mime="+mimetype);
 					if(url.startsWith("blob:")) {
@@ -2107,8 +2107,6 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void jsGoOnline() {
-			//goOnline();
-			// called by callee.js
 			connectToServerIsWanted = true;
 			storePrefsBoolean("connectWanted",true);
 			startReconnecter(false,0); // wakeIfNoNet=false, reconnectDelaySecs=0
@@ -2531,7 +2529,7 @@ public class WebCallService extends Service {
 				};
 				scheduler.schedule(runnable2, 500l, TimeUnit.MILLISECONDS);
 			} else {
-				Log.d(TAG,"WsClient onOpen, but not webviewMainPageLoaded");
+				Log.d(TAG,"# WsClient onOpen, but no myWebView or not webviewMainPageLoaded");
 				//updateNotification(readyToReceiveCallsString,false);	// ??? too early? has init been sent?
 			}
 		}
@@ -2626,27 +2624,29 @@ public class WebCallService extends Service {
 
 					// close prev connection
 					if(wsClient!=null) {
+/*
 						WebSocketClient tmpWsClient = wsClient;
 						wsClient = null;
-						/*
+
 						// closeBlocking() makes no sense here bc we received a 1006
 						// it would also hang
-						Log.d(TAG,"onClose wsClient.closeBlocking()...");
-						try {
-							tmpWsClient.closeBlocking();
-						} catch(Exception ex) {
-							Log.d(TAG,"onClose wsClient.closeBlocking ex="+ex);
-						}
-						*/
+						//Log.d(TAG,"onClose wsClient.closeBlocking()...");
+						//try {
+						//	tmpWsClient.closeBlocking();
+						//} catch(Exception ex) {
+						//	Log.d(TAG,"onClose wsClient.closeBlocking ex="+ex);
+						//}
 
 						// TODO maybe we should send websocket.CloseMessage ???
 						Log.d(TAG,"onClose wsClient.close()...");
 						tmpWsClient.close();
+*/
+						closeWsClient(false, "onClose");
 
 						if(myWebView!=null && webviewMainPageLoaded) {
 							runJS("wsOnClose2()",null); // set wsConn=null; abort blinkButtonFunc()
 						}
-						Log.d(TAG,"onClose wsClient.close() done");
+						//Log.d(TAG,"onClose wsClient.close() done");
 
 						// TODO problem is that the server may STILL think it is connected to this client
 						// and that re-login below may fail with "already/still logged in" because of this
@@ -3281,14 +3281,17 @@ public class WebCallService extends Service {
 	}
 
 	private void startReconnecter(boolean wakeIfNoNet, int reconnectDelaySecs) {
-		Log.d(TAG,"startReconnecter");
+		Log.d(TAG,"startReconnecter myWebView="+(myWebView!=null));
 		if(wsClient!=null) {
+/*
 			// close() the old (damaged) wsClient connection
 			// closeBlocking() makes no sense here bc server has stopped sending pings
 			Log.d(TAG,"startReconnecter close old wsClient");
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
 			tmpWsClient.close();
+*/
+			closeWsClient(false, "startReconnecter");
 		}
 
 //		if(haveNetworkInt<=0 && wakeIfNoNet && screenForWifiMode>0) {
@@ -3300,11 +3303,11 @@ public class WebCallService extends Service {
 			setLoginUrl();
 			// TODO do we need to copy cookies here?
 			if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-				Log.d(TAG,"startReconnecter cancel old then start new reconnectSchedFuture");
+				Log.d(TAG,"startReconnecter cancel old then start new reconnectSchedFuture "+reconnectDelaySecs);
 				reconnectSchedFuture.cancel(false);
 				reconnectSchedFuture = null;
 			} else {
-				Log.d(TAG,"startReconnecter start reconnectSchedFuture");
+				Log.d(TAG,"startReconnecter start reconnectSchedFuture "+reconnectDelaySecs+" "+(myWebView!=null));
 			}
 			reconnectSchedFuture = scheduler.schedule(reconnecter, reconnectDelaySecs, TimeUnit.SECONDS);
 		} else {
@@ -3661,6 +3664,7 @@ public class WebCallService extends Service {
 
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl);
+
 				statusMessage("Login "+loginUserName,-1,true,false);
 				try {
 					URL url = new URL(loginUrl);
@@ -3824,9 +3828,12 @@ public class WebCallService extends Service {
 						// network error: retry login
 						if(wsClient!=null) {
 							// wsClient must be null before we start reconnecter
+/*
 							Log.d(TAG,"reconnecter status!=200 wsClient.close() before start");
 							wsClient.close();
 							wsClient = null;
+*/
+							closeWsClient(false, "reconnecter status!=200 before start");
 						}
 						if(reconnectCounter < ReconnectCounterMax) {
 							int delaySecs = reconnectCounter*10;
@@ -3930,7 +3937,7 @@ public class WebCallService extends Service {
 						boolean wasReconnectBusy = reconnectBusy;
 						reconnectBusy = false;
 						reconnectCounter = 0;
-						Log.d(TAG,"reconnecter login fail '"+wsAddr+"' give up "+reader.readLine()+
+						Log.d(TAG,"# reconnecter login fail '"+wsAddr+"' give up "+reader.readLine()+
 							" "+reader.readLine()+" "+reader.readLine()+" "+reader.readLine());
 						statusMessage("Gave up reconnecting, "+response,-1,true,true);
 
@@ -4002,7 +4009,7 @@ public class WebCallService extends Service {
 						return;
 					}
 
-					Log.d(TAG,"connectHost("+wsAddr+") "+haveNetworkInt);
+					Log.d(TAG,"connectHost("+wsAddr+") net="+haveNetworkInt+" "+(myWebView!=null));
 					if(haveNetworkInt==2) {
 						statusMessage("Connecting Wifi...",-1,true,false);
 					} else if(haveNetworkInt==1) {
@@ -4656,6 +4663,7 @@ public class WebCallService extends Service {
 				networkStateReceiver = null;
 			}
 			// clearing wsClient, so that onClose (triggered by closeBlocking()) won't start new wakeIntent
+/*
 			Log.d(TAG,"disconnectHost clear wsClient");
 			WebSocketClient tmpWsClient = wsClient;
 			wsClient = null;
@@ -4665,6 +4673,8 @@ public class WebCallService extends Service {
 			} catch(InterruptedException ex) {
 				Log.e(TAG,"# disconnectHost InterruptedException",ex);
 			}
+*/
+			closeWsClient(true, "disconnectHost");
 		}
 
 		statusMessage("Offline", -1, sendNotification, false);
@@ -5040,9 +5050,9 @@ public class WebCallService extends Service {
 	private void updateNotification(String msg, boolean important) {
 		// android notification
 		if(msg=="") {
-			Log.d(TAG,"# updateNotification msg empty");
+			Log.d(TAG,"! updateNotification msg empty");
 		} else if(stopSelfFlag) {
-			Log.d(TAG,"# updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
+			Log.d(TAG,"updateNotification msg="+msg+" important="+important+" skip on stopSelfFlag");
 		} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) { // < 19
 			Log.d(TAG,"updateNotification msg="+msg+" SKIP sdk="+Build.VERSION.SDK_INT+" smaller than K (19)");
 		} else {
@@ -5094,9 +5104,9 @@ public class WebCallService extends Service {
 
 		// kill the service itself
 		Log.d(TAG, "exitService stopSelf()");
-		stopSelfFlag = true;
 		onDestroy();
-		// stopSelf must not be called before startForeground
+		stopSelfFlag = true;
+		// stopSelf must not be called without a preceeding startForeground
 		stopSelf();
 	}
 
@@ -5275,12 +5285,21 @@ public class WebCallService extends Service {
 			if(wsClient!=null) {
 				// disconnect old connection to avoid server re-login denial ("already/still logged in")
 				// note: this may cause: onClose code=1000 ("normal closure")
-				Log.d(TAG,"networkChange disconnect old connection");
+/*
+				Log.d(TAG,"networkChange close old connection");
 				//wsClient.close();
 				//wsClient = null;
 				WebSocketClient tmpWsClient = wsClient;
 				wsClient = null;
-				tmpWsClient.close();
+				try {
+					tmpWsClient.close();
+				} catch(Exception ex) {
+					Log.d(TAG,"networkChange old connection close ex="+ex.toString());
+				} finally {
+					Log.d(TAG,"networkChange old connection closed");
+				}
+*/
+				closeWsClient(false, "networkChange");
 			}
 
 			// call scheduler.schedule()
@@ -5302,6 +5321,40 @@ public class WebCallService extends Service {
 				Log.d(TAG,"networkChange start reconnecter in 3s");
 				reconnectSchedFuture = scheduler.schedule(reconnecter, 3, TimeUnit.SECONDS);
 			}
+		}
+	}
+
+	private void closeWsClient(boolean blocking, String from) {
+		WebSocketClient tmpWsClient = wsClient;
+		wsClient = null;
+		if(tmpWsClient==null) {
+			if(blocking) {
+				Log.d(TAG,"! "+from+" closeWsClient wsClient was null");
+			} else {
+				Log.d(TAG,"! "+from+" closeWsClient none-blocking wsClient was null");
+			}
+			return;
+		}
+		try {
+			if(blocking) {
+				Log.d(TAG,from+" closeWsClient blocking...");
+				tmpWsClient.closeBlocking();
+			} else {
+				Log.d(TAG,from+" closeWsClient none-blocking...");
+				tmpWsClient.close();
+			}
+		} catch(Exception ex) {
+			if(blocking) {
+				Log.d(TAG,"# "+from+" closeWsClient blocking ex="+ex);
+			} else {
+				Log.d(TAG,"# "+from+" closeWsClient none-blocking ex="+ex);
+			}
+		}
+
+		if(blocking) {
+			Log.d(TAG,from+" closeWsClient blocking done");
+		} else {
+			Log.d(TAG,from+" closeWsClient none-blocking done");
 		}
 	}
 
