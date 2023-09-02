@@ -1541,10 +1541,10 @@ public class WebCallService extends Service {
 				@Override
 				public boolean onConsoleMessage(ConsoleMessage cm) {
 					String msg = cm.message();
-					if(!msg.startsWith("showStatus")) {
+					//if(!msg.startsWith("showStatus")) {
 						// TODO msg can be very long
 						Log.d(TAG,"con: "+msg + " L"+cm.lineNumber());
-					}
+					//}
 					if(msg.equals("Uncaught ReferenceError: goOnline is not defined")) {
 						if(wsClient==null) {
 							// error loading callee page: most likely this is a domain name error
