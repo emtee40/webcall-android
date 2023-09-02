@@ -2199,7 +2199,7 @@ public class WebCallService extends Service {
 			// called by JS:goOffline()
 			Log.d(TAG,"JS wsClose");
 
-			postStatus("state", "deactivated");
+//			postStatus("state", "deactivated");
 
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true,false); // sendNotif skipStopForeground
@@ -2533,7 +2533,7 @@ public class WebCallService extends Service {
 
 		@Override
 		public void onOpen(ServerHandshake handshakedata) {
-			// connection was opened, so we tell JS code
+			// connection to server was opened, so we tell JS wsOnOpen()
 			if(myWebView!=null && webviewMainPageLoaded) {
 				Log.d(TAG,"WsClient onOpen -> js:wsOnOpen");
 				// wsOnOpen may come too early and cause:
@@ -3267,7 +3267,11 @@ public class WebCallService extends Service {
 		// we need a method to display the last msg when device gets out of doze
 		// see: lastStatusMessage
 		Log.d(TAG,"calleeIsConnected() status(readyToReceiveCallsString)");
-		statusMessage(readyToReceiveCallsString,-1,true,false);
+		if(callPickedUpFlag || peerConnectFlag) {
+			updateNotification("Call in progress", false);
+		} else {
+			statusMessage(readyToReceiveCallsString,-1,true,false);
+		}
 
 		// peerConCreateOffer() does not trigger onIceCandidate() callbacks
 		//runJS("peerConCreateOffer();",null);
