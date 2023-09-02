@@ -2962,13 +2962,17 @@ public class WebCallService extends Service {
 				// NOTE: message MUST NOT contain apostrophe (') characters
 				String encodedMessage = message.replace("'", "&#39;");
 				String argStr = "wsOnMessage2('"+encodedMessage+"','serv-direct');";
+				/*
 				if(message.startsWith("callerOffer|")) {
-					Log.d(TAG,"onMessage callerOffer -> runJS() (activity running)");
+					//Log.d(TAG,"onMessage callerOffer -> runJS() (activity running)");
 				} else if(message.startsWith("missedCalls|")) {
-					Log.d(TAG,"onMessage missedCalls -> runJS() (activity running)");
+					//Log.d(TAG,"onMessage missedCalls -> runJS() (activity running)");
+				} else if(message.startsWith("callerCandidate|")) {
+					//Log.d(TAG,"onMessage callerCandidate -> runJS() (activity running)");
 				} else {
-					Log.d(TAG,"onMessage "+message+" -> runJS("+argStr+") (activity running)");
+					//Log.d(TAG,"onMessage "+message+" -> runJS("+argStr+") (activity running)");
 				}
+				*/
 				//Log.d(TAG,"onMessage runJS "+argStr);
 				// forward message to signalingCommand() in callee.js
 				runJS(argStr,null);
