@@ -571,7 +571,7 @@ public class WebCallService extends Service {
 
 				message = intent.getStringExtra("acceptCall");
 				if(message!=null && message!="") {
-					// user responded to the call-notification dialog by accepting the call
+					// user responded to the 3-button call-notification dialog by accepting the call
 					// this intent is coming from the started activity
 					if(myWebView!=null && webviewMainPageLoaded) {
 						// autoPickup now
@@ -2138,6 +2138,7 @@ public class WebCallService extends Service {
 					}
 				};
 				scheduler.schedule(runnable2, 100l, TimeUnit.MILLISECONDS);
+// TODO when we return true, we will abort gotStream2 (not call prepareCallee())
 				return true;
 			}
 			Log.d(TAG,"JS calleeReady() no queued WebRtcMessages()");
@@ -2365,6 +2366,7 @@ public class WebCallService extends Service {
 				//Log.d(TAG,"JS rtcConnect() "+Build.VERSION.SDK_INT+" >= "+Build.VERSION_CODES.Q+" do nothing");
 			}
 
+			// 3-button call-notification dialog may have set autoPickup (via serviceCmdReceiver "acceptCall")
 			if(autoPickup) {
 				autoPickup = false;
 				Log.d(TAG,"JS rtcConnect() autoPickup...");
@@ -2376,6 +2378,8 @@ public class WebCallService extends Service {
 					}
 				};
 				scheduler.schedule(runnable2, 500l, TimeUnit.MILLISECONDS);
+				// tell JS to not ring or blink
+				// and no Accept call buttons are needed, pickup() was already called
 				return true;
 			}
 			Log.d(TAG,"JS rtcConnect() no autoPickup");
@@ -2483,7 +2487,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean ringStart() {
-			ringFlag = true;
+			ringFlag = true; // for isRingin()
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 				startRinging();
 				return true;
@@ -2493,7 +2497,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean ringStop() {
-			ringFlag = false;
+			ringFlag = false; // for isRingin()
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 				stopRinging("JS"); // from callee.js stopAllAudioEffects()
 				return true;
