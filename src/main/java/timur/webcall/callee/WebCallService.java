@@ -3475,7 +3475,7 @@ public class WebCallService extends Service {
 			// message MUST NOT contain apostrophe
 			String encodedMessage = message.replace("'", "&#39;");
 			String argStr = "wsOnMessage2('"+encodedMessage+"','serv-process');";
-			Log.d(TAG,"processWebRtcMessages runJS "+argStr);
+			//Log.d(TAG,"processWebRtcMessages runJS "+argStr);
 			/*
 			// we wait till runJS has been processed before we runJS the next
 			runJS(argStr, new ValueCallback<String>() {
@@ -4786,8 +4786,8 @@ public class WebCallService extends Service {
 		} else if(!webviewMainPageLoaded && !str.equals("history.back()")) {
 			Log.d(TAG, "# runJS("+logstr+") but no webviewMainPageLoaded");
 		} else {
-// when problem striks, "runJS(...) post..." will be logged
-//                  but "runJS evalJS exec"  will be not logged
+			// when problem striks, "runJS(...) post..." will be logged
+			//                  but "runJS evalJS exec"  will be not logged
 			Log.d(TAG, "runJS("+logstr+") post...");
 			// Causes the Runnable r to be added to the message queue.
 			// The runnable will be run on the thread to which this handler is attached.
