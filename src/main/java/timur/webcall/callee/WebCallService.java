@@ -1956,9 +1956,11 @@ public class WebCallService extends Service {
 		public void peerDisConnect() {
 			// called by endWebRtcSession()
 			Log.d(TAG,"JS peerDisConnect()");
+			/*
 			if(peerConnectFlag) { // aka mediaConnect
-				// we want to show "Peer disconnect" ONLY if we had a media connect
-				statusMessage("Peer disconnect",500,false,false);
+				// old: we want to show "Peer disconnect" ONLY if we had a media connect
+				// new: if JS calls us, it can do the statusMessage
+				//statusMessage("Peer disconnect",500,false,false);
 			} else {
 				// if we did not have a media connect, we may need to dismiss the notification bubble
 				// it may still be visible
@@ -1972,12 +1974,12 @@ public class WebCallService extends Service {
 					updateNotification("Offline",false);
 				}
 			}
-			peerConnectFlag = false;
+			*/
 
+			peerConnectFlag = false;
 			callPickedUpFlag = false;
 			peerDisconnnectFlag = true;
 			autoPickup = false;
-
 			stopRinging("peerDisConnect");
 
 			if(audioManager!=null) {
@@ -3244,7 +3246,7 @@ public class WebCallService extends Service {
 			mediaPlayer.stop();
 			mediaPlayer = null;
 		} else {
-			Log.d(TAG,"stopRinging (was not active), from="+comment);
+			//Log.d(TAG,"stopRinging (was not active), from="+comment);
 		}
 	}
 
