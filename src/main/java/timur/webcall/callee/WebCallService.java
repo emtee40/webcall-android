@@ -436,6 +436,7 @@ public class WebCallService extends Service {
 	@Override
 	public void onTrimMemory(int level) {
 		Log.d(TAG, "onTrimMemory level="+level);
+		// level==20 when activity moves to the background
 		super.onTrimMemory(level);
 	}
 
@@ -617,9 +618,10 @@ public class WebCallService extends Service {
 		context = this;
 
 		if(connectivityManager==null) {
+			Log.d(TAG,"onStartCommand connectivityManager==null");
 			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
 		} else {
-			Log.d(TAG,"! onStartCommand connectivityManager!=null");
+			Log.d(TAG,"onStartCommand connectivityManager!=null");
 		}
 		if(connectivityManager==null) {
 			Log.d(TAG,"# onStartCommand fatal cannot get connectivityManager");
