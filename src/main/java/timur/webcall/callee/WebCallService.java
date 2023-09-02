@@ -248,7 +248,7 @@ public class WebCallService extends Service {
 	// callPickedUpFlag is set from pickup until peerConnect, activates proximitySensor
 	private static volatile boolean callPickedUpFlag = false;
 
-	// peerConnectFlag set if full mediaConnect is established
+	// peerConnectFlag is set if full mediaConnect is established
 	private static volatile boolean peerConnectFlag = false;
 
 	// peerDisconnnectFlag is set when call is ended by endWebRtcSession() -> peerDisConnect()
@@ -600,7 +600,7 @@ public class WebCallService extends Service {
 					Log.d(TAG, "serviceCmdReceiver dismissNotification "+message);
 
 					// we can later close this notification by sending a new not-high priority notification
-					updateNotification("Incoming webcall...",false);
+					updateNotification("Incoming WebCall...",false);
 					return;
 				}
 
@@ -1943,6 +1943,8 @@ public class WebCallService extends Service {
 			Log.d(TAG,"JS peerConnect() - mediaConnect");
 			peerConnectFlag=true;
 			callPickedUpFlag=false;
+
+			updateNotification("Call in progress", false);
 			// turn speakerphone off - the idea is to always switch audio playback to the earpiece
 			// on devices without an earpiece (tablets) this is expected to do nothing
 			// we do it now here instead of at setProximity(true), because it is more reliable this way
@@ -1995,6 +1997,12 @@ public class WebCallService extends Service {
 
 			// this is used for ringOnSpeakerOn
 			audioToSpeakerSet(audioToSpeakerMode>0,false);
+
+			if(wsClient==null && connectToServerIsWanted==false) {
+				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> removeNotification()");
+				statusMessage("Offline",-1,true,false);
+				removeNotification();
+			}
 		}
 
 		@android.webkit.JavascriptInterface
@@ -4515,139 +4523,6 @@ public class WebCallService extends Service {
 
 		Log.d(TAG,"! checkNetworkState nothing");
 		haveNetworkInt=0;
-/*
-		NetworkInfo wifiInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-		NetworkInfo mobileInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
-		if((netActiveInfo==null || !netActiveInfo.isConnected()) &&
-				(wifiInfo==null || !wifiInfo.isConnected()) &&
-				(mobileInfo==null || !mobileInfo.isConnected())) {
-			// no network is connected
-			Log.d(TAG,"networkState netActiveInfo/wifiInfo/mobileInfo==null "+wsClient+" "+reconnectBusy);
-			if(connectToServerIsWanted) {
-				statusMessage("No network",-1,true,false);
-			}
-			if(wifiLock!=null && wifiLock.isHeld() && !connectToServerIsWanted) {
-				// release wifi lock
-				Log.d(TAG,"networkState wifiLock.release");
-				wifiLock.release();
-			}
-			haveNetworkInt=0;
-			return;
-		}
-
-		String netTypeName = "";
-		if(netActiveInfo!=null) {
-			netTypeName = netActiveInfo.getTypeName();
-		}
-		if(extendedLogsFlag) {
-			Log.d(TAG,"networkState netActiveInfo="+netActiveInfo+" "+(wsClient!=null) +
-				" "+reconnectBusy+" "+netTypeName);
-		}
-		if((netTypeName!=null && netTypeName.equalsIgnoreCase("WIFI")) ||
-				(wifiInfo!=null && wifiInfo.isConnected())) {
-			// wifi is connected: need wifi-lock
-			if(haveNetworkInt==2) {
-				return;
-			}
-			Log.d(TAG,"networkState connected to wifi");
-			haveNetworkInt=2;
-			if(setWifiLockMode<=0) {
-				Log.d(TAG,"networkState WifiLockMode off");
-			} else if(wifiLock==null) {
-				Log.d(TAG,"networkState wifiLock==null");
-			} else if(wifiLock.isHeld()) {
-				Log.d(TAG,"networkState wifiLock isHeld");
-			} else {
-				// enable wifi lock
-				Log.d(TAG,"networkState wifiLock.acquire");
-				wifiLock.acquire();
-			}
-			if(connectToServerIsWanted && !reconnectBusy) {
-				// if we are supposed to be connected and A) reconnecter is NOT in progress 
-				// or B) reconnecter IS in progress, but is waiting idly for network to come back
-				if(restartReconnectOnNetwork) {
-					if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
-						Log.d(TAG,"networkState connected to wifi keepAwakeWakeLock.acquire");
-						keepAwakeWakeLock.acquire(3 * 60 * 1000);
-						keepAwakeWakeLockStartTime = (new Date()).getTime();
-					}
-					if(!reconnectBusy) {
-						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-							// why wait for the scheduled reconnecter (in 8 or 60s)?
-							// let's cancel it and start a new one right away
-							Log.d(TAG,"networkState connected to wifi cancel reconnectSchedFuture");
-							if(reconnectSchedFuture.cancel(false)) {
-								// cancel successful - run reconnecter right away
-								Log.d(TAG,"networkState connected to wifi restart recon");
-								reconnectSchedFuture = scheduler.schedule(reconnecter, 0, TimeUnit.SECONDS);
-							}
-						} else {
-							Log.d(TAG,"networkState connected to wifi restart recon");
-							reconnectSchedFuture = scheduler.schedule(reconnecter, 0, TimeUnit.SECONDS);
-						}
-					} else {
-						Log.d(TAG,"networkState connected wifi: no reconnecter: reconnectBusy="+reconnectBusy);
-					}
-				}
-			} else {
-				// if we are NOT supposed to be connected 
-				// or we are, but reconnecter is in progress and is NOT waiting for network to come back
-				Log.d(TAG,"networkState wifi !connectToServerIsWanted "+connectToServerIsWanted);
-			}
-
-		} else if((netActiveInfo!=null && netActiveInfo.isConnected()) ||
-				(mobileInfo!=null && mobileInfo.isConnected())) {
-			// connected via mobile (or whatever) no need for wifi-lock
-			if(haveNetworkInt==1) {
-				return;
-			}
-			Log.d(TAG,"networkState connected to something other than wifi");
-			if(wifiLock!=null && wifiLock.isHeld()) {
-				// release wifi lock
-				Log.d(TAG,"networkState wifiLock.release");
-				wifiLock.release();
-			}
-			haveNetworkInt=1;
-			if(connectToServerIsWanted && !reconnectBusy) {
-				// we don't like to wait for the scheduled reconnecter job
-				// let's cancel it and start it right away
-				if(restartReconnectOnNetwork) {
-					if(keepAwakeWakeLock!=null && !keepAwakeWakeLock.isHeld()) {
-						Log.d(TAG,"networkState connected to net keepAwakeWakeLock.acquire");
-						keepAwakeWakeLock.acquire(3 * 60 * 1000);
-						keepAwakeWakeLockStartTime = (new Date()).getTime();
-					}
-					if(!reconnectBusy) {
-						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-							// why wait for the scheduled reconnecter job
-							// let's cancel and start it right away
-							Log.d(TAG,"networkState connected to net cancel reconnectSchedFuture");
-							if(reconnectSchedFuture.cancel(false)) {
-								// cancel successful - run reconnecter right away
-								Log.d(TAG,"networkState connected to net restart recon");
-								reconnectSchedFuture = scheduler.schedule(reconnecter, 0, TimeUnit.SECONDS);
-							}
-						} else {
-							Log.d(TAG,"networkState connected to net restart recon");
-							reconnectSchedFuture = scheduler.schedule(reconnecter, 0, TimeUnit.SECONDS);
-						}
-					} else {
-						Log.d(TAG,"networkState connected other: no reconnecter: reconnectBusy="+reconnectBusy);
-					}
-				}
-			} else {
-				Log.d(TAG,"networkState mobile !connectToServerIsWanted or reconnectBusy");
-			}
-
-		} else {
-			// no network at all
-			// if we should be connected to webcall server, we need to do something
-			statusMessage("No network",-1,true,false);
-			Log.d(TAG,"networkState connected to nothing - auto wake...");
-			// this will make onClose postpone reconnect attempts
-			haveNetworkInt=0;
-		}
-*/
 	}
 
 	private void disconnectHost(boolean sendNotification, boolean skipStopForeground) {
@@ -4690,7 +4565,10 @@ public class WebCallService extends Service {
 			closeWsClient(true, "disconnectHost");
 		}
 
-		statusMessage("Offline", -1, sendNotification, false);
+		if(!callPickedUpFlag && !peerConnectFlag) {
+			statusMessage("Offline", -1, sendNotification, false);
+		}
+
 		// TODO this did not change the state of the online/offline buttons/switch
 		//      is also useless for the clearCache+reload use case
 
@@ -4717,17 +4595,27 @@ public class WebCallService extends Service {
 //		alarmReceiver serviceCmdReceiver networkStateReceiver
 //      powerConnectionReceiver dozeStateReceiver myNetworkCallback
 
-		if(!skipStopForeground) {
-			// remove the Android notification
-			// we delay this so that the last notification msg ("Offline") is still shown
-			scheduler.schedule(new Runnable() {
-				public void run() {
-					// no more notification msgs afte this
-					connectToServerIsWanted = false;
-					removeNotification();
-					Log.d(TAG,"disconnectHost delayed done");
-				}
-			}, 200l, TimeUnit.MILLISECONDS);
+		if(skipStopForeground) {
+			Log.d(TAG,"disconnectHost with skipStopForeground, removeNotification() not wanted");
+		} else {
+			connectToServerIsWanted = false;
+			storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
+			postStatus("state", "deactivated");
+
+			if(callPickedUpFlag || peerConnectFlag) {
+				Log.d(TAG,"disconnectHost no skipStopForeground, but callInProgress");
+			} else {
+				Log.d(TAG,"disconnectHost -> removeNotification()");
+				// remove the Android notification
+				// we delay this so that the last notification msg ("Offline") is still shown
+				scheduler.schedule(new Runnable() {
+					public void run() {
+						// no more notification msgs afte this
+						removeNotification();
+						Log.d(TAG,"disconnectHost delayed done");
+					}
+				}, 200l, TimeUnit.MILLISECONDS);
+			}
 		}
 	}
 
@@ -4746,7 +4634,7 @@ public class WebCallService extends Service {
 
 	private void endPeerConAndWebView() {
 		// hangup peercon, reset webview, clear callPickedUpFlag
-		// called by Exit button
+		// called by Exit button (JS wsExit())
 		Log.d(TAG, "endPeerConAndWebView");
 		if(wsClient!=null) {
 			if(myWebView!=null && webviewMainPageLoaded) {
@@ -5055,7 +4943,7 @@ public class WebCallService extends Service {
 			//});
 		}
 
-		if(notifi && connectToServerIsWanted) {
+		if(notifi && (connectToServerIsWanted || callPickedUpFlag || peerConnectFlag)) {
 			updateNotification(msg, important);
 		}
 	}
