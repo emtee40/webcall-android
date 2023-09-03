@@ -2129,6 +2129,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void jsGoOnline() {
+			Log.d(TAG,"JS jsGoOnline() -> startReconnecter()");
 			connectToServerIsWanted = true;
 			storePrefsBoolean("connectWanted",true);
 			startReconnecter(false,0); // wakeIfNoNet=false, reconnectDelaySecs=0
@@ -3278,7 +3279,7 @@ public class WebCallService extends Service {
 		String username = null;
 		try {
 			webcalldomain = prefs.getString("webcalldomain", "").toLowerCase(Locale.getDefault());
-			Log.d(TAG,"setLoginUrl webcalldomain="+webcalldomain);
+			//Log.d(TAG,"setLoginUrl webcalldomain="+webcalldomain);
 		} catch(Exception ex) {
 			Log.d(TAG,"# setLoginUrl webcalldomain ex="+ex);
 			return;
@@ -3286,7 +3287,7 @@ public class WebCallService extends Service {
 		try {
 			// loginUserName = calleeID
 			loginUserName = prefs.getString("username", "").toLowerCase(Locale.getDefault());
-			Log.d(TAG,"setLoginUrl username="+loginUserName);
+			//Log.d(TAG,"setLoginUrl username="+loginUserName);
 		} catch(Exception ex) {
 			Log.d(TAG,"# setLoginUrl username ex="+ex);
 			return;
@@ -3294,7 +3295,7 @@ public class WebCallService extends Service {
 
 		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName+
 					"&ver="+ BuildConfig.VERSION_NAME+"_"+getWebviewVersion(); // +"&re=true";
-		Log.d(TAG,"setLoginUrl="+loginUrl);
+		//Log.d(TAG,"setLoginUrl="+loginUrl);
 	}
 
 	private void startReconnecter(boolean wakeIfNoNet, int reconnectDelaySecs) {
