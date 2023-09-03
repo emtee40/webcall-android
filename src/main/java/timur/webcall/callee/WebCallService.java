@@ -179,6 +179,8 @@ public class WebCallService extends Service {
 	private final static String startAlarmString = "timur.webcall.callee.START_ALARM"; // for alarmReceiver
 	private final static Intent startAlarmIntent = new Intent(startAlarmString);
 	private final static String readyToReceiveCallsString = "Ready to receive calls";
+	private final static String callInProgress = "Call in progress";
+	private final static String offlineMessage = "Offline";
 
 	// serverPingPeriodPlus corresponds to pingPeriod=60 in wsClient.go
 	// after serverPingPeriodPlus secs with no pings, checkLastPing() considers server connection gone
@@ -634,9 +636,12 @@ public class WebCallService extends Service {
 
 		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 			// create notificationChannel to start service in foreground
-			String msg = "offline";
+			String msg = offlineMessage;
 			if(wsClient!=null) {
 				msg = readyToReceiveCallsString;
+			}
+			if(callPickedUpFlag || peerConnectFlag) {
+				msg = callInProgress;
 			}
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
 			startForeground(NOTIF_ID,buildServiceNotification(msg,false));
@@ -1025,7 +1030,11 @@ public class WebCallService extends Service {
 							}
 							if(wsClient==null && connectToServerIsWanted) {
 								// let's go straight to reconnecter
-								statusMessage("Offline",-1,true,false);
+								if(callPickedUpFlag || peerConnectFlag) {
+									updateNotification(callInProgress,false);
+								} else {
+									statusMessage(offlineMessage,-1,true,false);
+								}
 
 								if(reconnectSchedFuture==null && !reconnectBusy) {
 									// if no reconnecter is scheduled at this time...
@@ -1944,7 +1953,7 @@ public class WebCallService extends Service {
 			peerConnectFlag=true;
 			callPickedUpFlag=false;
 
-			updateNotification("Call in progress", false);
+			updateNotification(callInProgress, false);
 			// turn speakerphone off - the idea is to always switch audio playback to the earpiece
 			// on devices without an earpiece (tablets) this is expected to do nothing
 			// we do it now here instead of at setProximity(true), because it is more reliable this way
@@ -1972,8 +1981,8 @@ public class WebCallService extends Service {
 					// display readyToReceiveCallsString ONLY if we are still ws-connected
 					updateNotification(readyToReceiveCallsString,false);
 				} else {
-					// otherwise display "Offline"
-					updateNotification("Offline",false);
+					// otherwise display offlineMessage
+					updateNotification(offlineMessage,false);
 				}
 			}
 			*/
@@ -2000,7 +2009,7 @@ public class WebCallService extends Service {
 
 			if(wsClient==null && connectToServerIsWanted==false) {
 				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> removeNotification()");
-				statusMessage("Offline",-1,true,false);
+				statusMessage(offlineMessage,-1,true,false);
 				removeNotification();
 			}
 		}
@@ -2090,7 +2099,7 @@ public class WebCallService extends Service {
 			}
 			if(wsClient==null) {
 				Log.d(TAG,"JS wsOpen wsClient==null addr="+setWsAddr);
-				// if connectHost fails, it will send updateNotification("offline")
+				// if connectHost fails, it will send updateNotification(offlineMessage)
 				WebSocketClient wsCli = connectHost(setWsAddr,false);
 				Log.d(TAG,"JS wsOpen wsClient="+(wsCli!=null));
 				if(wsCli!=null) {
@@ -2595,8 +2604,8 @@ public class WebCallService extends Service {
 				wsClient = null;
 				if(reconnectSchedFuture==null) {
 					// if wsClient was closed by onDestroy, networkStateReceiver will be null
-					if(networkStateReceiver!=null) {
-						statusMessage("Offline",-1,true,false);
+					if(networkStateReceiver!=null && !callPickedUpFlag && !peerConnectFlag) {
+						statusMessage(offlineMessage,-1,true,false);
 					}
 				}
 				if(myWebView!=null && webviewMainPageLoaded) {
@@ -2641,23 +2650,7 @@ public class WebCallService extends Service {
 
 					// close prev connection
 					if(wsClient!=null) {
-/*
-						WebSocketClient tmpWsClient = wsClient;
-						wsClient = null;
-
 						// closeBlocking() makes no sense here bc we received a 1006
-						// it would also hang
-						//Log.d(TAG,"onClose wsClient.closeBlocking()...");
-						//try {
-						//	tmpWsClient.closeBlocking();
-						//} catch(Exception ex) {
-						//	Log.d(TAG,"onClose wsClient.closeBlocking ex="+ex);
-						//}
-
-						// TODO maybe we should send websocket.CloseMessage ???
-						Log.d(TAG,"onClose wsClient.close()...");
-						tmpWsClient.close();
-*/
 						closeWsClient(false, "onClose");
 
 						if(myWebView!=null && webviewMainPageLoaded) {
@@ -2667,10 +2660,9 @@ public class WebCallService extends Service {
 
 						// TODO problem is that the server may STILL think it is connected to this client
 						// and that re-login below may fail with "already/still logged in" because of this
-
 					} else {
-						if(reconnectSchedFuture==null) {
-							statusMessage("Offline",-1,true,false);
+						if(reconnectSchedFuture==null && !callPickedUpFlag && !peerConnectFlag) {
+							statusMessage(offlineMessage,-1,true,false);
 						}
 					}
 
@@ -2714,7 +2706,7 @@ public class WebCallService extends Service {
 						// offlineAction(): disable offline-button and enable online-button
 						runJS("offlineAction();",null);
 						// TODO: wanted=false ?
-						// TODO: notif "Offline" ?
+						// TODO: notif offlineMessage ?
 					}
 
 					if(code==-1) {
@@ -2971,7 +2963,7 @@ public class WebCallService extends Service {
 				// webviewMainPageLoaded is set by onPageFinished() when a /callee/ url has been loaded
 				// NOTE: message MUST NOT contain apostrophe (') characters
 				String encodedMessage = message.replace("'", "&#39;");
-				String argStr = "wsOnMessage2('"+encodedMessage+"','serv-direct');";
+				String argStr = "wsOnMessage2('"+encodedMessage+"','service');";
 				/*
 				if(message.startsWith("callerOffer|")) {
 					//Log.d(TAG,"onMessage callerOffer -> runJS() (activity running)");
@@ -3268,7 +3260,7 @@ public class WebCallService extends Service {
 		// see: lastStatusMessage
 		Log.d(TAG,"calleeIsConnected() status(readyToReceiveCallsString)");
 		if(callPickedUpFlag || peerConnectFlag) {
-			updateNotification("Call in progress", false);
+			updateNotification(callInProgress, false);
 		} else {
 			statusMessage(readyToReceiveCallsString,-1,true,false);
 		}
@@ -3488,7 +3480,7 @@ public class WebCallService extends Service {
 			String message = (String)(stringMessageQueue.poll());
 			// message MUST NOT contain apostrophe
 			String encodedMessage = message.replace("'", "&#39;");
-			String argStr = "wsOnMessage2('"+encodedMessage+"','serv-process');";
+			String argStr = "wsOnMessage2('"+encodedMessage+"','service');";
 			//Log.d(TAG,"processWebRtcMessages runJS "+argStr);
 			/*
 			// we wait till runJS has been processed before we runJS the next
@@ -3690,7 +3682,9 @@ public class WebCallService extends Service {
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl);
 
-				statusMessage("Login "+loginUserName,-1,true,false);
+				if(!callPickedUpFlag && !peerConnectFlag) {
+					statusMessage("Login "+loginUserName,-1,true,false);
+				}
 				try {
 					URL url = new URL(loginUrl);
 					//Log.d(TAG,"reconnecter openCon("+url+")");
@@ -4035,12 +4029,16 @@ public class WebCallService extends Service {
 					}
 
 					Log.d(TAG,"connectHost("+wsAddr+") net="+haveNetworkInt+" "+(myWebView!=null));
-					if(haveNetworkInt==2) {
-						statusMessage("Connecting Wifi...",-1,true,false);
-					} else if(haveNetworkInt==1) {
-						statusMessage("Connecting Mobile...",-1,true,false);
+					if(callPickedUpFlag || peerConnectFlag) {
+						// at least the notification should continue to show callInProgress
 					} else {
-						statusMessage("Connecting..",-1,true,false);
+						if(haveNetworkInt==2) {
+							statusMessage("Connecting Wifi...",-1,true,false);
+						} else if(haveNetworkInt==1) {
+							statusMessage("Connecting Mobile...",-1,true,false);
+						} else {
+							statusMessage("Connecting..",-1,true,false);
+						}
 					}
 
 					//Log.d(TAG,"reconnecter connectHost("+wsAddr+")");
@@ -4113,7 +4111,7 @@ public class WebCallService extends Service {
 					//statusMessage("reconnect to server",500,true,false);	// TODO statusMessage needed ???
 
 					// we trust now that server will receive "init" and respond with "sessionId|"+codetag
-					// onMessage() will receive this and call runJS(wsOnMessage2('sessionId|v3.5.5','serv-direct');)
+					// onMessage() will receive this and call runJS(wsOnMessage2('sessionId|v3.5.5','service');)
 					// this should call calleeIsConnected() - but this does not always work
 
 					// calleeIsConnected() will send readyToReceiveCallsString notification
@@ -4422,7 +4420,9 @@ public class WebCallService extends Service {
 		Log.d(TAG,"connectHost fail, clear wsClient, return null");
 		wsClient = null;
 
-		updateNotification("Offline",false);
+		if(!callPickedUpFlag && !peerConnectFlag) {
+			updateNotification(offlineMessage,false);
+		}
 		postStatus("state", "disconnected");
 		return null;
 	}
@@ -4570,13 +4570,13 @@ public class WebCallService extends Service {
 		}
 
 		if(!callPickedUpFlag && !peerConnectFlag) {
-			statusMessage("Offline", -1, sendNotification, false);
+			statusMessage(offlineMessage, -1, sendNotification, false);
 		}
 
 		// TODO this did not change the state of the online/offline buttons/switch
 		//      is also useless for the clearCache+reload use case
 
-		// clear the "offline" msg from lastStatusMessage, so that it will not be pulled and shown from postDozeAction()
+		// clear the offlineMessage from lastStatusMessage, so that it will not be pulled and shown from postDozeAction()
 		lastStatusMessage = "";
 		postStatus("state", "disconnected");
 
@@ -4611,7 +4611,7 @@ public class WebCallService extends Service {
 			} else {
 				Log.d(TAG,"disconnectHost -> removeNotification()");
 				// remove the Android notification
-				// we delay this so that the last notification msg ("Offline") is still shown
+				// we delay this so that the last notification msg (offlineMessage) is still shown
 				scheduler.schedule(new Runnable() {
 					public void run() {
 						// no more notification msgs afte this
