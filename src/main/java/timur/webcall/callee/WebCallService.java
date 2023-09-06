@@ -534,7 +534,7 @@ public class WebCallService extends Service {
 					peerDisconnnectFlag = true;
 
 					String deniedCallerID = intent.getStringExtra("denyID");
-					if(deniedCallerID!="") {
+					if(deniedCallerID!=null && deniedCallerID!="") {
 						Log.d(TAG, "serviceCmdReceiver deniedCallerID="+deniedCallerID);
 						// TODO add deniedCallerID to a list of rejected IDs
 						notificationManager.cancel(NOTIF_ID2);
