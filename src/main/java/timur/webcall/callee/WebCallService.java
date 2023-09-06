@@ -168,6 +168,8 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.handshake.ServerHandshake;
 import org.java_websocket.framing.Framedata;
+import org.json.JSONObject;
+import org.json.JSONArray;
 
 import timur.webcall.callee.BuildConfig;
 
@@ -531,6 +533,14 @@ public class WebCallService extends Service {
 					// stop secondary wakeIntents from rtcConnect()
 					peerDisconnnectFlag = true;
 
+					String deniedCallerID = intent.getStringExtra("denyID");
+					if(deniedCallerID!="") {
+						Log.d(TAG, "serviceCmdReceiver deniedCallerID="+deniedCallerID);
+						// TODO add deniedCallerID to a list of rejected IDs
+						notificationManager.cancel(NOTIF_ID2);
+						return;
+					}
+
 					// disconnect caller / stop ringing
 					if(wsClient==null) {
 						Log.w(TAG,"# serviceCmdReceiver denyCall wsClient==null");
@@ -635,7 +645,7 @@ public class WebCallService extends Service {
 					// user responded to the call-notification dialog and it needs to be closed
 					// this intent is coming from the started activity
 					Log.d(TAG, "serviceCmdReceiver hangup "+message);
-					endWebRtcSession();
+					endWebRtcSession(true);
 					endPeerCon();
 					return;
 				}
@@ -2032,15 +2042,13 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void peerDisConnect() {
-			// called by endWebRtcSession()
+			// called by JS endWebRtcSession()
 			Log.d(TAG,"JS peerDisConnect()");
 
 			// clear peerConnectFlag + callPickedUpFlag, cancel(NOTIF_ID2), stopRinging
 			endPeerCon();
 
 			autoPickup = false;		// ???
-
-			statusMessage(readyToReceiveCallsString,-1,true);
 
 			if(audioManager!=null) {
 				if(audioManager.isWiredHeadsetOn()) {
@@ -2056,10 +2064,13 @@ public class WebCallService extends Service {
 			// this is used for ringOnSpeakerOn
 			audioToSpeakerSet(audioToSpeakerMode>0,false);
 
+			// don't need to do statusMessage() below since JS code is running (has called us)
 			if(wsClient==null && connectToServerIsWanted==false) {
 				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> removeNotification()");
-				statusMessage(offlineMessage,-1,true);
+				//statusMessage(offlineMessage,-1,true);
 				removeNotification();
+			} else {
+				//statusMessage(readyToReceiveCallsString,-1,true);
 			}
 		}
 
@@ -2472,7 +2483,7 @@ public class WebCallService extends Service {
 		public void wsExit() {
 			// called by Exit button
 			Log.d(TAG,"JS wsExit -> endWebRtcSession()");
-			endWebRtcSession();
+			endWebRtcSession(true);
 
 			// hangup peercon, clear callPickedUpFlag, stopRinging();
 			Log.d(TAG,"JS wsExit -> endPeerCon()");
@@ -2855,7 +2866,6 @@ public class WebCallService extends Service {
 				// bc for Android10+ we can display callerID and callerName in the notification
 
 				String payload = message.substring(11);
-
 				String callerID = "";
 				String callerName = "";
 				String txtMsg = "";
@@ -2878,111 +2888,43 @@ public class WebCallService extends Service {
 					contentText += " \""+txtMsg+"\""; // greeting msg
 				}
 
-				incomingCall = true;
-
 				if(context==null) {
 					Log.e(TAG,"# onMessage incoming call: "+contentText+", no context to wake activity");
 				} else if(activityVisible) {
 					Log.d(TAG,"onMessage incoming call: "+contentText+", activityVisible (do nothing)");
 				} else {
-					// activity is NOT visible
-					Date wakeDate = new Date();
-					//Log.d(TAG,"onMessage incoming call: "+
-					//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
-					Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification");
-
-					long eventMS = wakeDate.getTime();
-
-					Intent acceptIntent = new Intent(context, WebCallCalleeActivity.class);
-					acceptIntent.putExtra("wakeup", "pickup");
-					acceptIntent.putExtra("date", eventMS);
-
-					Intent switchToIntent =	new Intent(context, WebCallCalleeActivity.class);
-					switchToIntent.putExtra("wakeup", "call");
-					switchToIntent.putExtra("date", eventMS);
-
-					Intent denyIntent = new Intent("serviceCmdReceiver");
-					denyIntent.putExtra("denyCall", "true");
-
-					NotificationCompat.Builder notificationBuilder =
-						new NotificationCompat.Builder(context, NOTIF_HIGH)
-							.setSmallIcon(R.mipmap.notification_icon)
-							.setContentTitle("WebCall incoming")
-							.setCategory(NotificationCompat.CATEGORY_CALL)
-							.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-							//.setLights(0xff00ff00, 300, 100)			// TODO does not seem to work on N7
-
-							// on O+ setPriority is ignored in favor of notifChannel (NOTIF_P2P)
-							.setPriority(NotificationCompat.PRIORITY_HIGH)
-
-							.addAction(R.mipmap.notification_icon,"Accept",
-								PendingIntent.getActivity(context, 2, acceptIntent,
-									PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-							.addAction(R.mipmap.notification_icon,"Switch",
-								PendingIntent.getActivity(context, 3, switchToIntent,
-									PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-							.addAction(R.mipmap.notification_icon,"Reject",
-								PendingIntent.getBroadcast(context, 4, denyIntent,
-									PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-							//.setAutoCancel(true) // any click will close the notification
-							// if this is false, any click will switchTo activity
-
-							// we are using our own ringtone (see startRinging())
-							//.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-
-							// clicking on the area behind the action buttons will (also) switchTo activty
-							.setFullScreenIntent(
-								PendingIntent.getActivity(context, 1, switchToIntent,
-									PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
-
-							.setContentText(contentText);
-
-					Notification notification = notificationBuilder.build();
-					notificationManager.notify(NOTIF_ID2, notification);
-					Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification sent");
-
-					// send log RING to server
-					String ringMsg = "log|callee Incoming /";
-					// do this later when all deployed server can cope without 3rd arg
-					//String ringMsg = "log|callee Incoming";
-					Log.d(TAG,"wsClient.send RING-log "+ringMsg);
-					try {
-						wsClient.send(ringMsg);
-					} catch(Exception ex) {
-						Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
-					}
-
+					incomingCall(callerID,callerName,txtMsg,false);
 					startRinging();
 				}
 			}
 
 			if(message.startsWith("cancel|")) {
 				// server or caller signalling end of call (or end of ringing)
-				Log.d(TAG,"onMessage cancel");
-// tmtmtm
+				Log.d(TAG,"onMessage "+message);
+
 				// dismiss the 3-button dialog (just in case)
 				notificationManager.cancel(NOTIF_ID2);
-
 				incomingCall = false;
-				// clear queueWebRtcMessage / stringMessageQueue
-				while(!stringMessageQueue.isEmpty()) {
-					stringMessageQueue.poll();
-				}
-				stopRinging("cancel|");
+				stopRinging(message);
 
-				if(myWebView==null || !webviewMainPageLoaded) {
-					endWebRtcSession();
-				}
-				endPeerCon();
-
-				if(wsClient!=null) {
-					Log.d(TAG,"onMessage cancel, send init... (activity not running)");
-					wsClient.send("init|");
-					// wait for sessionID
-					//statusMessage("",-1,true);
+				if(myWebView!=null && webviewMainPageLoaded) {
+// do nothing: callee.js will receive cancel
+//					Log.d(TAG,"onMessage cancel, -> JS endWebRtcSession()");
+//					endWebRtcSession(false);
+				} else {
+					// clear queueWebRtcMessage / stringMessageQueue
+					while(!stringMessageQueue.isEmpty()) {
+						stringMessageQueue.poll();
+					}
+					Log.d(TAG,"onMessage cancel, -> JS endPeerCon()");
+					endPeerCon();
+					if(wsClient!=null && connectToServerIsWanted) {
+						Log.d(TAG,"onMessage cancel, send init...");
+						wsClient.send("init|");
+						// wait for sessionID
+					} else {
+						statusMessage("Offline",-1,true);
+					}
 				}
 				Log.d(TAG,"onMessage cancel done");
 			}
@@ -2996,6 +2938,40 @@ public class WebCallService extends Service {
 					Log.d(TAG,"onMessage sessionId -> calleeIsConnected() (activity not running)");
 					calleeIsConnected();
 					incomingCall = false;
+					return;
+				}
+
+				if(message.startsWith("waitingCallers|")) {
+					String payload = message.substring(15);
+					if(payload.length()>0) {
+						try {
+							JSONArray jArray = new JSONArray(payload);
+							Log.d(TAG,"onMessage waitingCallers elements="+jArray.length());
+							if(jArray.length()>0) {
+								if(context==null) {
+									Log.e(TAG,"# onMessage waitingCallers: payload="+payload+
+										", no context to wake activity");
+								} else if(activityVisible) {
+									Log.d(TAG,"onMessage waitingCallers: payload="+payload+
+										", activityVisible (do nothing)");
+								} else {
+									JSONObject oneObject = jArray.getJSONObject(0);
+									String callerID = oneObject.getString("CallerID");
+									String callerName = oneObject.getString("CallerName");
+									String txtMsg = "(waiting)";
+									if(jArray.length()>1) {
+										txtMsg = "(more waiting...)";
+									}
+									incomingCall(callerID,callerName,txtMsg,true);
+									//startRinging();
+								}
+							} else {
+								notificationManager.cancel(NOTIF_ID2);
+							}
+						} catch(Exception ex) {
+							Log.d(TAG,"# onMessage "+message+" json parse ex="+ex);
+						}
+					}
 					return;
 				}
 
@@ -4652,16 +4628,13 @@ public class WebCallService extends Service {
 		callPickedUpFlag = false;
 		peerConnectFlag = false;
 		peerDisconnnectFlag = true;
-		if(wsClient!=null) {
-			// we should wait for sessionId before statusMessage()
-			//statusMessage("",-1,true);
-		}
 	}
 
-	private void endWebRtcSession() {
+	private void endWebRtcSession(boolean disconnectCaller) {
 		if(myWebView!=null && webviewMainPageLoaded) {
-			Log.d(TAG, "endWebRtcSession runJS('endWebRtcSession()')");
-			runJS("endWebRtcSession(true,false)", new ValueCallback<String>() {
+			Log.d(TAG, "endWebRtcSession runJS(endWebRtcSession(disconnectCaller="+disconnectCaller+"))");
+			// 1st param: disconnectCaller
+			runJS("endWebRtcSession("+disconnectCaller+","+connectToServerIsWanted+")", new ValueCallback<String>() {
 				@Override
 				public void onReceiveValue(String s) {
 					//endPeerCon2();
@@ -4919,6 +4892,95 @@ public class WebCallService extends Service {
 		r.play();
 	}
 
+
+	private void incomingCall(String callerID, String callerName, String txtMsg, boolean waitingCaller) {
+		String contentText = callerName+" "+callerID;
+		if(textmode.equals("true")) { // set by signalingCommand()
+			contentText += " TextMode ";
+		}
+		if(txtMsg!="") {
+			contentText += " \""+txtMsg+"\""; // greeting msg
+		}
+
+		incomingCall = true;
+
+		// activity is NOT visible
+		Date wakeDate = new Date();
+		//Log.d(TAG,"onMessage incoming call: "+
+		//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
+		Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification");
+
+		long eventMS = wakeDate.getTime();
+
+		Intent acceptIntent = new Intent(context, WebCallCalleeActivity.class);
+		acceptIntent.putExtra("wakeup", "pickup");
+		acceptIntent.putExtra("date", eventMS);
+
+		Intent switchToIntent =	new Intent(context, WebCallCalleeActivity.class);
+		switchToIntent.putExtra("wakeup", "call");
+		switchToIntent.putExtra("date", eventMS);
+
+		Intent denyIntent = new Intent("serviceCmdReceiver");
+		denyIntent.putExtra("denyCall", "true");
+		if(waitingCaller) {
+			denyIntent.putExtra("denyID", callerID);
+		}
+
+		NotificationCompat.Builder notificationBuilder =
+			new NotificationCompat.Builder(context, NOTIF_HIGH)
+				.setSmallIcon(R.mipmap.notification_icon)
+				.setContentTitle("WebCall incoming")
+				.setOngoing(true)
+				.setCategory(NotificationCompat.CATEGORY_CALL)
+				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+				//.setLights(0xff00ff00, 300, 100)			// TODO does not seem to work on N7
+
+				// on O+ setPriority is ignored in favor of notifChannel (NOTIF_P2P)
+				.setPriority(NotificationCompat.PRIORITY_HIGH)
+
+				.addAction(R.mipmap.notification_icon,"Accept",
+					PendingIntent.getActivity(context, 2, acceptIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.addAction(R.mipmap.notification_icon,"Switch",
+					PendingIntent.getActivity(context, 3, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.addAction(R.mipmap.notification_icon,"Reject",
+					PendingIntent.getBroadcast(context, 4, denyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				//.setAutoCancel(true) // any click will close the notification
+				// if this is false, any click will switchTo activity
+
+				// we are using our own ringtone (see startRinging())
+				//.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+
+				// clicking on the area behind the action buttons will (also) switchTo activty
+				.setFullScreenIntent(
+					PendingIntent.getActivity(context, 1, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
+
+				.setContentText(contentText);
+
+		Notification notification = notificationBuilder.build();
+		notificationManager.notify(NOTIF_ID2, notification);
+		Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification sent");
+
+		// send log RING to server
+		String ringMsg = "log|callee Incoming /";
+		// do this later when all deployed server can cope without 3rd arg
+		//String ringMsg = "log|callee Incoming";
+		Log.d(TAG,"wsClient.send RING-log "+ringMsg);
+		try {
+			wsClient.send(ringMsg);
+		} catch(Exception ex) {
+			Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
+		}
+
+		//startRinging();
+	}
+
 	private void statusMessage(String message, int timeoutMs, boolean notifi) {
 		// webcall status msg + android notification (if notifi + important are true)
 		//Log.d(TAG,"statusMessage: "+message+" n="+notifi);
@@ -5020,6 +5082,7 @@ public class WebCallService extends Service {
 			new NotificationCompat.Builder(context, NOTIF_LOW)
 				.setSmallIcon(R.mipmap.notification_icon)
 				.setContentTitle(title)
+				.setOngoing(true)
 				.setCategory(NotificationCompat.CATEGORY_CALL)
 				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
@@ -5063,6 +5126,7 @@ public class WebCallService extends Service {
 			new NotificationCompat.Builder(this, notifChannel)
 					.setContentTitle(msg) // 1st line
 					.setPriority(prio) // on O+ setPriority is ignored in favor of notifChannel
+					.setOngoing(true)
 					//.setContentText(msg) // 2nd line
 					.setSmallIcon(R.mipmap.notification_icon)
 					.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
