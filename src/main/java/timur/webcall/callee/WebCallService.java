@@ -2822,11 +2822,13 @@ public class WebCallService extends Service {
 			if(message.startsWith("textmode|")) {
 				textmode = message.substring(9);
 				if(textmode.equals("true")) {
-					//Log.d(TAG,"onMessage textmode=("+textmode+")");
+					Log.d(TAG,"onMessage textmode=("+textmode+")");
 				} else {
 					textmode="";
-					//Log.d(TAG,"onMessage no textmode");
+					Log.d(TAG,"onMessage no textmode");
 				}
+				String argStr = "wsOnMessage2('"+message+"','service');";
+				runJS(argStr,null);
 				return;
 			}
 
