@@ -5033,7 +5033,8 @@ public class WebCallService extends Service {
 			}
 
 			if(!message.equals("")) {
-				String dispMsg = "Server: "+message;
+				//String dispMsg = "Server: "+message;
+				String dispMsg = message;
 				Log.d(TAG,"updateNotification message="+dispMsg);
 				Notification notif = buildServiceNotification(dispMsg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW);
 				notificationManager.notify(NOTIF_ID1, notif);
