@@ -2908,9 +2908,9 @@ public class WebCallService extends Service {
 				stopRinging(message);
 
 				if(myWebView!=null && webviewMainPageLoaded) {
-// do nothing: callee.js will receive cancel
-//					Log.d(TAG,"onMessage cancel, -> JS endWebRtcSession()");
-//					endWebRtcSession(false);
+					// do nothing: callee.js will receive cancel
+					//Log.d(TAG,"onMessage cancel, -> JS endWebRtcSession()");
+					//endWebRtcSession(false);
 				} else {
 					// clear queueWebRtcMessage / stringMessageQueue
 					while(!stringMessageQueue.isEmpty()) {
