@@ -186,8 +186,8 @@ public class WebCallService extends Service {
 	private final static Intent startAlarmIntent = new Intent(startAlarmString);
 
 	private final static String readyToReceiveCallsString = "Ready to receive calls";
-	private final static String connectedToServerString = "Connected";
-	private final static String offlineMessage = "Offline";
+	private final static String connectedToServerString = "Connected"; // same as readyToReceive, but during peerCon
+	private final static String offlineMessage = "WebCall server disconnected"; // used to be "Offline";
 
 	// for callInProgressNotification()
 	private final static String callInProgressMessage = "Call in progress";
@@ -699,20 +699,9 @@ public class WebCallService extends Service {
 					msg = connectedToServerString;
 				}
 			}
-
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
 			startForeground(NOTIF_ID1,buildServiceNotification(msg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW));
-
-			if(callPickedUpFlag || peerConnectFlag) {
-				Log.d(TAG,"onStartCommand updateNotification()");
-				if(wsClient!=null) {
-//					updateNotification(readyToReceiveCallsString);
-					statusMessage(readyToReceiveCallsString,-1,true);
-				} else {
-//					updateNotification(offlineMessage);
-					statusMessage(offlineMessage,-1,true);
-				}
-			}
+			statusMessage(msg,-1,true);
 		}
 
 		if(batteryStatusfilter==null) {
@@ -2013,10 +2002,8 @@ public class WebCallService extends Service {
 			callPickedUpFlag=false;
 
 			if(wsClient!=null) {
-//				updateNotification(readyToReceiveCallsString);
 				statusMessage(readyToReceiveCallsString,-1,true);
 			} else {
-//				updateNotification(offlineMessage);
 				statusMessage(offlineMessage,-1,true);
 			}
 
@@ -2036,7 +2023,7 @@ public class WebCallService extends Service {
 				" callPickedUpFlag="+callPickedUpFlag+" peerConnectFlag="+peerConnectFlag);
 			if(callPickedUpFlag || peerConnectFlag) {
 				micMuteState = muteState;
-				updateNotification(""); // for the server: show lastStatusMessage again
+				updateNotification(""); // for the server: repeat lastStatusMessage
 			}
 		}
 
@@ -2672,7 +2659,7 @@ public class WebCallService extends Service {
 				wsClient = null;
 				if(reconnectSchedFuture==null) {
 					// if wsClient was closed by onDestroy, networkStateReceiver will be null
-					if(networkStateReceiver!=null && !callPickedUpFlag && !peerConnectFlag) {
+					if(networkStateReceiver!=null) {
 						statusMessage(offlineMessage,-1,true);
 					}
 				}
@@ -2729,7 +2716,7 @@ public class WebCallService extends Service {
 						// TODO problem is that the server may STILL think it is connected to this client
 						// and that re-login below may fail with "already/still logged in" because of this
 					} else {
-						if(reconnectSchedFuture==null && !callPickedUpFlag && !peerConnectFlag) {
+						if(reconnectSchedFuture==null) {
 							statusMessage(offlineMessage,-1,true);
 						}
 					}
@@ -2925,7 +2912,7 @@ public class WebCallService extends Service {
 						wsClient.send("init|");
 						// wait for sessionID
 					} else {
-						statusMessage("Offline",-1,true);
+						statusMessage(offlineMessage,-1,true);
 					}
 				}
 				Log.d(TAG,"onMessage cancel done");
@@ -3705,9 +3692,7 @@ public class WebCallService extends Service {
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl);
 
-				if(!callPickedUpFlag && !peerConnectFlag) {
-					statusMessage("Login "+loginUserName,-1,true);
-				}
+				statusMessage("Login "+loginUserName,-1,true);
 				try {
 					URL url = new URL(loginUrl);
 					//Log.d(TAG,"reconnecter openCon("+url+")");
@@ -4067,7 +4052,7 @@ public class WebCallService extends Service {
 							Log.d(TAG,"reconnecter reconnect retry in "+delaySecs+"sec");
 
 							//Log.d(TAG,"reconnecter connectHost() fail - retry...");
-							statusMessage("Connection lost, failed to reconnect, will trying again... ",-1,true);
+							statusMessage("Server lost, failed to reconnect, will trying again... ",-1,true);
 
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 								Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
@@ -4422,7 +4407,7 @@ public class WebCallService extends Service {
 
 		Log.d(TAG,"connectHost fail, clear wsClient, return null");
 		wsClient = null;
-//		updateNotification(offlineMessage);
+		//updateNotification(offlineMessage);
 		statusMessage(offlineMessage,-1,true);
 		postStatus("state", "disconnected");
 		return null;
@@ -4491,7 +4476,7 @@ public class WebCallService extends Service {
 				Log.d(TAG,"checkNetworkState netActiveInfo==null");
 				// this will make onClose postpone reconnect attempts
 				haveNetworkInt=0;
-				//statusMessage("No network",-1,true);
+				statusMessage("No network",-1,true);
 				return;
 			}
 
@@ -4990,8 +4975,10 @@ public class WebCallService extends Service {
 			Log.d(TAG,"statusMessage: "+message+" n="+notifi+" skip: no webview");
 		} else if(!webviewMainPageLoaded) {
 			Log.d(TAG,"statusMessage: "+message+" n="+notifi+" skip: notOnMainPage");
-		} else if(peerConnectFlag && message.equals(readyToReceiveCallsString)) {
-			Log.d(TAG,"statusMessage: no readyToReceive in peerConnect mode");
+//		} else if(peerConnectFlag && message.equals(readyToReceiveCallsString)) {
+//			Log.d(TAG,"statusMessage: no readyToReceive in peerConnect mode");
+		} else if(peerConnectFlag || callPickedUpFlag) {
+			Log.d(TAG,"statusMessage: skip while peerCon: "+message);
 		} else if(message.equals("")) {
 			Log.d(TAG,"statusMessage: no display of empty message");
 		} else {
