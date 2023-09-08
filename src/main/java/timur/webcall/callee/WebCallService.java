@@ -645,8 +645,9 @@ public class WebCallService extends Service {
 					// user responded to the call-notification dialog and it needs to be closed
 					// this intent is coming from the started activity
 					Log.d(TAG, "serviceCmdReceiver hangup "+message);
+					// will set disconnectCaller=true
+					// and call runJS('endWebRtcSession(true,connectToServerIsWanted)
 					endWebRtcSession(true);
-					endPeerCon();
 					return;
 				}
 
@@ -2020,11 +2021,11 @@ public class WebCallService extends Service {
 		@android.webkit.JavascriptInterface
 		public void muteStateChange(boolean muteState) {
 			Log.d(TAG,"JS muteStateChange("+muteState+")"+
-				" callPickedUpFlag="+callPickedUpFlag+" peerConnectFlag="+peerConnectFlag);
-			if(callPickedUpFlag || peerConnectFlag) {
+				" callPickedUpFlag="+callPickedUpFlag+" peerConnectFlag="+peerConnectFlag+" wsClient="+(wsClient!=null));
+//			if(callPickedUpFlag || peerConnectFlag) {
 				micMuteState = muteState;
-				updateNotification(""); // for the server: repeat lastStatusMessage
-			}
+//				updateNotification(""); // for the server: repeat lastStatusMessage
+//			}
 		}
 
 		@android.webkit.JavascriptInterface
@@ -2453,7 +2454,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void callPickedUp() {
-			Log.d(TAG,"JS callPickedUp()");
+			Log.d(TAG,"JS callPickedUp() wsClient="+(wsClient!=null));
 			// route audio to it's normal destination (to headset if connected)
 			audioToSpeakerSet(false,false);
 			callPickedUpFlag=true; // no peerConnect yet, this activates proximitySensor
@@ -4619,7 +4620,8 @@ public class WebCallService extends Service {
 
 	private void endWebRtcSession(boolean disconnectCaller) {
 		if(myWebView!=null && webviewMainPageLoaded) {
-			Log.d(TAG, "endWebRtcSession runJS(endWebRtcSession(disconnectCaller="+disconnectCaller+"))");
+			Log.d(TAG, "endWebRtcSession runJS(endWebRtcSession("+
+				"disconnectCaller="+disconnectCaller+",connectToServerIsWanted="+connectToServerIsWanted+"))");
 			// 1st param: disconnectCaller
 			runJS("endWebRtcSession("+disconnectCaller+","+connectToServerIsWanted+")", new ValueCallback<String>() {
 				@Override
