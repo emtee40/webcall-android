@@ -433,8 +433,7 @@ public class WebCallService extends Service {
 			keepAwakeWakeLock.release();
 		}
 
-//		updateNotification("Service terminated");
-		statusMessage("Service terminated",-1,true);
+		//statusMessage("Service terminated",-1,true);
 
 		// turn tile off
 		postStatus("state", "deactivated");
@@ -935,36 +934,7 @@ public class WebCallService extends Service {
 				public void onLost(Network network) {
 			        super.onLost(network);
 					lock.lock();
-					/*
-					if(network!=null) {
-						Log.d(TAG,"networkCallback onLost conWant="+connectToServerIsWanted);
-						// check the type of network lost...
-						NetworkInfo netInfo = connectivityManager.getNetworkInfo(network);
-						if(netInfo != null) {
-							if(netInfo.getType() == ConnectivityManager.TYPE_WIFI) {  // TYPE_WIFI==1
-								Log.d(TAG,"networkCallback onLost wifi "+netInfo.getExtraInfo());
-								statusMessage("wifi lost",-1,true,false);
-							} else {
-								Log.d(TAG,"networkCallback onLost other "+netInfo.getType()+" "+netInfo.getExtraInfo());
-								statusMessage("network lost",-1,true,false);
-							}
-						}
-					}
-					*/
-					// we could do the above: if(netInfo.getType() == ConnectivityManager.TYPE_WIFI)
-					// but we trust our haveNetworkInt to have our old state
-/*
-					if(haveNetworkInt==2) {
-						Log.d(TAG,"networkCallback onLost Wifi");
-						statusMessage("Wifi network lost",-1,true,false);
-					} else if(haveNetworkInt==1) {
-						Log.d(TAG,"networkCallback onLost mobile");
-						statusMessage("Mobile network lost",-1,true,false);
-					} else {
-						Log.d(TAG,"networkCallback onLost "+haveNetworkInt);
-						statusMessage("Network lost",-1,true,false);
-					}
-*/
+
 					int oldNetworkInt = haveNetworkInt;
 					haveNetworkInt = 0;
 
@@ -1003,21 +973,6 @@ public class WebCallService extends Service {
 							" vpn="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_VPN)+
 							" wifiAw="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE)+
 							" usb="+networkCapabi.hasTransport(NetworkCapabilities.TRANSPORT_USB));
-/*
-						if(haveNetworkInt<=0) {
-							// no new network, only lost a network
-							if(oldNetworkInt==2) {
-								Log.d(TAG,"networkCallback capabChange lost Wifi");
-								statusMessage("Wifi network lost",-1,true,false);
-							} else if(oldNetworkInt==1) {
-								Log.d(TAG,"networkCallback capabChange lost Mobile");
-								statusMessage("Mobile network lost",-1,true,false);
-							} else {
-								Log.d(TAG,"networkCallback capabChange lost other "+oldNetworkInt);
-								statusMessage("Network lost",-1,true,false);
-							}
-						}
-*/
 					}
 
 					if(/*haveNetworkInt>0 &&*/ haveNetworkInt!=oldNetworkInt) {
@@ -1374,14 +1329,12 @@ public class WebCallService extends Service {
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
 						//intent.putExtra("toast", "host lookup error. no network?");
-						statusMessage("Host lookup error. no network?",-1,true);
+						statusMessage("Host lookup error. No network?",-1,true);
 
 					} else if(errorCode==ERROR_UNKNOWN) {
 						Log.d(TAG, "# onReceivedError UNKNOWN "+description+" "+failingUrl);
-// TODO maybe this should not generate a toast
-// "# onReceivedError UNKNOWN net::ERR_FAILED https://timur.mobi/callee/1980-phone-ringing.mp3"
-//						intent.putExtra("toast", "Network error "+description);
-						statusMessage("Unknown connection error: "+description+" "+failingUrl,-1,true);
+						//intent.putExtra("toast", "Network error "+description);
+						statusMessage("Connection error: "+description+" "+failingUrl,-1,true);
 					} else {
 						Log.d(TAG, "# onReceivedError code="+errorCode+" "+description+" "+failingUrl);
 						//intent.putExtra("toast", "Error "+errorCode+" "+description);
@@ -2052,13 +2005,9 @@ public class WebCallService extends Service {
 			// this is used for ringOnSpeakerOn
 			audioToSpeakerSet(audioToSpeakerMode>0,false);
 
-			// don't need to do statusMessage() below since JS code is running (has called us)
 			if(wsClient==null && connectToServerIsWanted==false) {
 				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> removeNotification()");
-				//statusMessage(offlineMessage,-1,true);
 				removeNotification();
-			} else {
-				//statusMessage(readyToReceiveCallsString,-1,true);
 			}
 		}
 
@@ -2733,7 +2682,6 @@ public class WebCallService extends Service {
 					}
 					scheduler.schedule(new Runnable() {
 						public void run() {
-// TODO tmtmtm onLost should also do this (from: networkCallback onLost wifiLock.release)
 							if(reconnectSchedFuture!=null) {
 								Log.d(TAG,"onClose 1006 no reconnecter: reconnectSchedFuture!=null");
 							} else if(reconnectBusy) {
@@ -3676,7 +3624,7 @@ public class WebCallService extends Service {
 							}
 						} else {
 							Log.d(TAG,"reconnecter no network");
-							statusMessage("No network. Not reconnecting.",-1,true);
+							statusMessage("No network. Reconnector stopped.",-1,true);
 						}
 						reconnectBusy = false;
 						reconnectCounter = 0;
@@ -4977,8 +4925,6 @@ public class WebCallService extends Service {
 			Log.d(TAG,"statusMessage: "+message+" n="+notifi+" skip: no webview");
 		} else if(!webviewMainPageLoaded) {
 			Log.d(TAG,"statusMessage: "+message+" n="+notifi+" skip: notOnMainPage");
-//		} else if(peerConnectFlag && message.equals(readyToReceiveCallsString)) {
-//			Log.d(TAG,"statusMessage: no readyToReceive in peerConnect mode");
 		} else if(peerConnectFlag || callPickedUpFlag) {
 			Log.d(TAG,"statusMessage: skip while peerCon: "+message);
 		} else if(message.equals("")) {
@@ -5269,7 +5215,7 @@ public class WebCallService extends Service {
 				// start reconnecter (independent of whether we have a network or not)
 				Log.d(TAG,"networkChange start...");
 				if(newNetworkInt==2) {
-					statusMessage("Reconnect via Wifi...",-1,true);
+					statusMessage("Reconnecting via Wifi...",-1,true);
 					if(oldNetworkInt!=2) {
 						if(setWifiLockMode<=0) {
 							// prefer wifi not enabled by user
@@ -5285,12 +5231,12 @@ public class WebCallService extends Service {
 						}
 					}
 				} else if(newNetworkInt==1) {
-					statusMessage("Reconnect via Mobile...",-1,true);
+					statusMessage("Reconnecting via Mobile...",-1,true);
 				} else if(newNetworkInt>0) {
-					statusMessage("Reconnect...",-1,true);
+					statusMessage("Reconnecting...",-1,true);
 				} else {
 					// this would overwrite the 'network lost' msg
-					statusMessage("Reconnect...",-1,true);
+					statusMessage("Reconnecting...",-1,true);
 				}
 
 				// we need keepAwake to manage the reconnect
