@@ -1325,14 +1325,13 @@ public class WebCallService extends Service {
 				@Override
 				public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
 					// must tell user
-					Intent intent = new Intent("webcall");
+					//Intent intent = new Intent("webcall");
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
 						//intent.putExtra("toast", "host lookup error. no network?");
-						statusMessage("Host lookup error. No network?",-1,true);
-
+						statusMessage("Connection error: Host lookup",-1,true);
 					} else if(errorCode==ERROR_UNKNOWN) {
-						Log.d(TAG, "# onReceivedError UNKNOWN "+description+" "+failingUrl);
+						Log.d(TAG, "# onReceivedError "+description+" "+failingUrl);
 						//intent.putExtra("toast", "Network error "+description);
 						statusMessage("Connection error: "+description+" "+failingUrl,-1,true);
 					} else {
@@ -1340,7 +1339,7 @@ public class WebCallService extends Service {
 						//intent.putExtra("toast", "Error "+errorCode+" "+description);
 						statusMessage("Connection error code="+errorCode+" "+description+" "+failingUrl,-1,true);
 					}
-					sendBroadcast(intent);
+					//sendBroadcast(intent);
 				}
 
 				@TargetApi(android.os.Build.VERSION_CODES.M)
@@ -1483,7 +1482,7 @@ public class WebCallService extends Service {
 							// no need to execute onPageFinished() on hashchange or history back
 							// here we cut off "auto=1"
 							currentUrl = url.replace("?auto=1","");
-							Log.d(TAG, "onPageFinished only hashchange=" + currentUrl);
+							//Log.d(TAG, "onPageFinished only hashchange=" + currentUrl);
 							return;
 						}
 					}
@@ -1881,6 +1880,7 @@ public class WebCallService extends Service {
 			}
 		}
 		public void goOffline() {
+			// called by tile
 /*
 			if(wsClient==null) {
 				Log.d(TAG, "! goOffline() already offline");
@@ -1902,9 +1902,10 @@ public class WebCallService extends Service {
 			postStatus("state", "deactivated");
 			if(myWebView!=null && webviewMainPageLoaded) {
 				// wsConn=null, reconnect stays aktiv
-				Log.d(TAG,"goOffline -> js:wsOnClose2");
-				runJS("wsOnClose2()",null);
+				//Log.d(TAG,"goOffline -> js:wsOnClose2");
+				//runJS("wsOnClose2()",null);
 				// turn browser goOnlineSwitch to offline mode
+				Log.d(TAG,"goOffline -> js:offlineAction");
 				runJS("offlineAction()",null);
 			}
 
@@ -2613,15 +2614,17 @@ public class WebCallService extends Service {
 						statusMessage(offlineMessage,-1,true);
 					}
 				}
+				// deactivate the tile
+				postStatus("state", "deactivated");
 				if(myWebView!=null && webviewMainPageLoaded) {
 					// reconnect stays aktiv, goOnlineSwitch stays aktiv, connectToServerIsWanted not cleared
-					runJS("wsOnClose2();",null);
 					//runJS("wsOnClose2();", new ValueCallback<String>() {
 					//	@Override
 					//	public void onReceiveValue(String s) {
 					//		Log.d(TAG,"runJS('wsOnClose2') completed: "+s);
 					//	}
 					//});
+					runJS("offlineAction();",null);
 				}
 			} else {
 				Log.d(TAG,"onClose code="+code+" reason="+reason);
@@ -2706,11 +2709,11 @@ public class WebCallService extends Service {
 
 				} else {
 					// NOT 1006: TODO not exactly sure what to do with this
+					// deactivate the tile
+					postStatus("state", "deactivated");
 					if(myWebView!=null && webviewMainPageLoaded) {
 						// offlineAction(): disable offline-button and enable online-button
 						runJS("offlineAction();",null);
-						// TODO: wanted=false ?
-						// TODO: notif offlineMessage ?
 					}
 
 					if(code==-1) {
@@ -3610,25 +3613,27 @@ public class WebCallService extends Service {
 						// we pause reconnecter; if network comes back, checkNetworkState() will
 						// schedule a new reconnecter if connectToServerIsWanted is set
 						if(connectToServerIsWanted) {
-							Log.d(TAG,"reconnecter no network, reconnect paused...");
-							statusMessage("No network. Waiting to reconnect...",-1,true);
+							Log.d(TAG,"no network, reconnecter paused...");
+							statusMessage("No network. Will reconnect...",-1,true);
 
-							// we normally activate the tile in calleeIsConnected()
-							// while we are not yet connected, we activate the tile here
-							// because we are waiting for network
-							postStatus("state","connected");
-							// we must the same with the browser buttons
+							// let JS know that wsConn is gone
 							if(myWebView!=null && webviewMainPageLoaded) {
-								Log.d(TAG,"reconnecter -> js:wsOnOpen");
-								runJS("wsOnOpen()",null);
+								Log.d(TAG,"reconnecter -> js:wsOnClose2");
+								runJS("wsOnClose2()",null);
 							}
 						} else {
-							Log.d(TAG,"reconnecter no network");
+							Log.d(TAG,"no network, reconnecter stopped");
 							statusMessage("No network. Reconnector stopped.",-1,true);
+
+							// let JS know that wsConn is gone
+							if(myWebView!=null && webviewMainPageLoaded) {
+								Log.d(TAG,"reconnecter -> js:offlineAction");
+								runJS("offlineAction()",null);
+							}
 						}
+
 						reconnectBusy = false;
 						reconnectCounter = 0;
-						//runJS("offlineAction();",null); // goOnline enabled, goOffline disabled
 						return;
 					}
 				}
@@ -3729,7 +3734,8 @@ public class WebCallService extends Service {
 						reconnectBusy = false;
 						return;
 					}
-					int status=0;
+					String exString = "";
+					int status = 0;
 					try {
 						Log.d(TAG,"reconnecter con.connect()");
 						con.connect();
@@ -3776,7 +3782,7 @@ public class WebCallService extends Service {
 						//
 						// javax.net.ssl.SSLHandshakeException: Chain validation failed
 
-						String exString = ex.toString();
+						exString = ex.toString();
 						//if(exString.indexOf("SSLHandshakeException")>=0) {
 						if(exString.indexOf("Trust anchor for certification path not found")>=0) {
 							// turn reconnecter off
@@ -3811,10 +3817,16 @@ public class WebCallService extends Service {
 							if(delaySecs>ReconnectDelayMaxSecs) {
 								delaySecs = ReconnectDelayMaxSecs;
 							}
-							Log.d(TAG,"reconnecter reconnect status="+status+" retry in "+delaySecs+"sec");
-
-							statusMessage("Connection lost, failed to reconnect, will try again... "+
-								" (status="+status+")",-1,true);
+							if(status!=0) {
+								Log.d(TAG,"reconnecter fail status="+status+" retry in "+delaySecs+"sec");
+								statusMessage("Failed to reconnect, will try again... (status="+status+")",-1,true);
+							} else if(exString!="") {
+								Log.d(TAG,"reconnecter fail ex="+exString+" retry in "+delaySecs+"sec");
+								statusMessage("Failed to reconnect, will try again... (ex="+exString+")",-1,true);
+							} else {
+								Log.d(TAG,"reconnecter fail, retry in "+delaySecs+"sec");
+								statusMessage("Failed to reconnect, will try again...",-1,true);
+							}
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 								Log.d(TAG,"cancel old schedFuture");
 								reconnectSchedFuture.cancel(false);
@@ -3822,16 +3834,11 @@ public class WebCallService extends Service {
 							} else {
 								Log.d(TAG,"no old schedFuture to cancel");
 							}
-
-							// we normally activate the tile in calleeIsConnected()
-							// while we are not yet connected, but still reconnecting, we activate the tile also here
-							postStatus("state","connected");
-							// we must the same with the browser buttons
+							// let JS know that wsConn is gone
 							if(myWebView!=null && webviewMainPageLoaded) {
-								Log.d(TAG,"reconnecter -> js:wsOnOpen");
-								runJS("wsOnOpen()",null);
+								Log.d(TAG,"reconnecter -> js:wsOnClose2");
+								runJS("wsOnClose2()",null);
 							}
-
 							reconnectSchedFuture =
 								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
 							if(reconnectSchedFuture==null) {
@@ -3857,7 +3864,6 @@ public class WebCallService extends Service {
 							if(myWebView!=null && webviewMainPageLoaded) {
 								// offlineAction(): disable offline-button and enable online-button
 								runJS("offlineAction();",null);
-								// TODO also call JS wsOnClose2 ?
 							}
 							// we delay connectToServerIsWanted=false so that notifications will still be shown
 							final Runnable runnable2 = new Runnable() {
@@ -4595,7 +4601,9 @@ public class WebCallService extends Service {
 		} else {
 			// when problem striks, "runJS(...) post..." will be logged
 			//                  but "runJS evalJS exec"  will be not logged
-			Log.d(TAG, "runJS("+logstr+") post...");
+			if(!logstr.startsWith("wsOnMessage2")) {
+				Log.d(TAG, "runJS("+logstr+") post...");
+			}
 			// Causes the Runnable r to be added to the message queue.
 			// The runnable will be run on the thread to which this handler is attached.
 			if(!myWebView.post(new Runnable() {
@@ -4956,7 +4964,7 @@ public class WebCallService extends Service {
 			Log.d(TAG,"updateNotification msg is empty, set to lastStatusMessage="+message);
 		} else {
 			lastStatusMessage = message;
-			Log.d(TAG,"updateNotification lastStatusMessage set to message="+message);
+			//Log.d(TAG,"updateNotification lastStatusMessage set to message="+message);
 		}
 		if(stopSelfFlag) {
 			Log.d(TAG,"updateNotification msg="+message+" skip on stopSelfFlag");
@@ -5334,8 +5342,8 @@ public class WebCallService extends Service {
 			// TODO problem with this: that JS statusMessage() acts independent of service
 			// so lastStatusMessage is not always the last status msg
 			Log.d(TAG,"postDozeAction showStatus lastStatusMessage="+lastStatusMessage);
-// TODO remove '!'; note: here we add a leading '!' so we can see it was executed
-			runJS("showStatus('!"+lastStatusMessage+"',-1);",null);
+// TODO remove '_'; note: here we add a leading '_' so we can see it was executed
+			runJS("showStatus('."+lastStatusMessage+"',-1);",null);
 			lastStatusMessage="";
 		}
 	}
