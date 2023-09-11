@@ -1,0 +1,11 @@
+WebCall for Android 1.4.8
+with WebCall Server 4.0
+- User-Defined Custom IDs
+- New Call Screen
+- Notification support for Android 7.0-13.0
+- Hangup and Mute from Notification
+- Quick Setting Tile
+- Much improved User Interface
+- Low Power Consumption
+- Many Bugfixes
+

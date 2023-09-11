@@ -3828,11 +3828,11 @@ public class WebCallService extends Service {
 								statusMessage("Failed to reconnect, will try again...",-1,true);
 							}
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
-								Log.d(TAG,"cancel old schedFuture");
+								//Log.d(TAG,"cancel old schedFuture");
 								reconnectSchedFuture.cancel(false);
 								reconnectSchedFuture = null;
 							} else {
-								Log.d(TAG,"no old schedFuture to cancel");
+								//Log.d(TAG,"no old schedFuture to cancel");
 							}
 							// let JS know that wsConn is gone
 							if(myWebView!=null && webviewMainPageLoaded) {
@@ -4949,6 +4949,8 @@ public class WebCallService extends Service {
 			//		Log.d(TAG,"statusMessage completed: "+encodedMsg);
 			//	}
 			//});
+
+			// may throw: "# con: Uncaught ReferenceError: showStatus is not defined L1"
 		}
 
 		if(notifi) {
@@ -5342,8 +5344,7 @@ public class WebCallService extends Service {
 			// TODO problem with this: that JS statusMessage() acts independent of service
 			// so lastStatusMessage is not always the last status msg
 			Log.d(TAG,"postDozeAction showStatus lastStatusMessage="+lastStatusMessage);
-// TODO remove '_'; note: here we add a leading '_' so we can see it was executed
-			runJS("showStatus('."+lastStatusMessage+"',-1);",null);
+			runJS("showStatus('"+lastStatusMessage+"',-1);",null);
 			lastStatusMessage="";
 		}
 	}
