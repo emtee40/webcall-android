@@ -3567,6 +3567,10 @@ public class WebCallService extends Service {
 					return;
 				}
 
+				if(!serviceAlive) {
+					Log.d(TAG,"! reconnecter start !serviceAlive exit");
+					return;
+				}
 				/*
 				reconnectSchedFuture = null;
 				if(wsClient!=null) {
@@ -3839,12 +3843,16 @@ public class WebCallService extends Service {
 								Log.d(TAG,"reconnecter -> js:wsOnClose2");
 								runJS("wsOnClose2()",null);
 							}
-							reconnectSchedFuture =
-								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
-							if(reconnectSchedFuture==null) {
-								Log.d(TAG,"scheduled reconnect in "+delaySecs+"sec reconnectSchedFuture==null");
+							if(!serviceAlive) {
+								Log.d(TAG,"! reconnecter !serviceAlive exit");
 							} else {
-								Log.d(TAG,"scheduled reconnect in "+delaySecs+"sec done="+reconnectSchedFuture.isDone());
+								reconnectSchedFuture =
+									scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+								if(reconnectSchedFuture==null) {
+									Log.d(TAG,"scheduled reconnect in "+delaySecs+"sec reconnectSchedFuture==null");
+								} else {
+									Log.d(TAG,"scheduled recon in "+delaySecs+"sec done="+reconnectSchedFuture.isDone());
+								}
 							}
 							return;
 						}
@@ -4004,18 +4012,22 @@ public class WebCallService extends Service {
 							if(delaySecs>ReconnectDelayMaxSecs) {
 								delaySecs = ReconnectDelayMaxSecs;
 							}
-							Log.d(TAG,"reconnecter reconnect retry in "+delaySecs+"sec");
-
-							//Log.d(TAG,"reconnecter connectHost() fail - retry...");
-							statusMessage("Server lost, failed to reconnect, will trying again... ",-1,true);
 
 							if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 								Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 								reconnectSchedFuture.cancel(false);
 								reconnectSchedFuture = null;
 							}
-							reconnectSchedFuture =
-								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+							if(!serviceAlive) {
+								Log.d(TAG,"! reconnecter stopped !serviceAlive");
+							} else {
+								Log.d(TAG,"reconnecter reconnect retry in "+delaySecs+"sec");
+								//Log.d(TAG,"reconnecter connectHost() fail - retry...");
+								statusMessage("Server lost, failed to reconnect, will try again... ",-1,true);
+
+								reconnectSchedFuture =
+									scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+							}
 							return;
 						}
 						Log.d(TAG,"reconnecter connectHost() fail - give up");
@@ -4097,15 +4109,18 @@ public class WebCallService extends Service {
 						}
 						Log.d(TAG,"reconnecter reconnect ex="+ex+" retry in "+delaySecs+"sec");
 
-						statusMessage("Failed to reconnect, will try again...",-1,true);
-
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 							Log.d(TAG,"reconnecter cancel reconnectSchedFuture");
 							reconnectSchedFuture.cancel(false);
 							reconnectSchedFuture = null;
 						}
-						reconnectSchedFuture =
-							scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+						if(!serviceAlive) {
+							Log.d(TAG,"! reconnecter !serviceAlive exit");
+						} else {
+							statusMessage("Failed to reconnect, will try again...",-1,true);
+							reconnectSchedFuture =
+								scheduler.schedule(reconnecter, delaySecs, TimeUnit.SECONDS);
+						}
 						return;
 					}
 					Log.d(TAG,"reconnecter reconnect ex="+ex+" give up");
@@ -4229,6 +4244,11 @@ public class WebCallService extends Service {
 
 			Log.d(TAG,"connectHost connectBlocking...");
 			boolean isOpen = wsClient.connectBlocking();
+			if(!serviceAlive) {
+				Log.d(TAG,"! connectHost no serviceAlive exit");
+				closeWsClient(false, "connectHost no serviceAlive");
+				return null;
+			}
 			// ssl error: onError ex javax.net.ssl.SSLHandshakeException:
 			// java.security.cert.CertPathValidatorException: Trust anchor for certification path not found
 			Log.d(TAG,"connectHost connectBlocking done isOpen="+isOpen);
@@ -4610,7 +4630,9 @@ public class WebCallService extends Service {
 				@Override
 				public void run() {
 					// run() will run on the UI thread
-					myWebView.removeCallbacks(this);
+					if(myWebView!=null) {
+						myWebView.removeCallbacks(this);
+					}
 					// escape '\r\n' to '\\r\\n'
 					final String str2 = str.replace("\\", "\\\\");
 					//Log.d(TAG,"runJS evalJS "+str2);
@@ -5262,8 +5284,9 @@ public class WebCallService extends Service {
 					closeWsClient(false, "networkChange");
 				}
 
-				// call scheduler.schedule()
-				if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
+				if(!serviceAlive) {
+					Log.d(TAG,"! networkChange !serviceAlive exit");
+				} else if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
 					// we don't want to wait more than 3s
 					// but we also don't want to wait less than 3s
 					//   so that server has enough time to detect this disconnect
