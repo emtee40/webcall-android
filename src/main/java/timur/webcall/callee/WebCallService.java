@@ -1964,8 +1964,9 @@ public class WebCallService extends Service {
 			callPickedUpFlag=false;
 
 			if(wsClient!=null) {
-// TODO since we are in a call, this is NOT correct
-				statusMessage(readyToReceiveCallsString,-1,true);
+				// since we are in a call, readyToReceiveCallsString is NOT correct
+				//statusMessage(readyToReceiveCallsString,-1,true);
+				statusMessage(connectedToServerString,-1,true);
 			} else {
 				statusMessage(offlineMessage,-1,true);
 			}
