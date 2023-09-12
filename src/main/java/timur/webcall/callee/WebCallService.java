@@ -650,6 +650,12 @@ public class WebCallService extends Service {
 					return;
 				}
 
+				message = intent.getStringExtra("dummy");
+				if(message!=null && message!="") {
+					Log.d(TAG, "serviceCmdReceiver dummy "+message);
+					return;
+				}
+
 				Log.d(TAG, "serviceCmdReceiver no match");
 			}
 		};
@@ -4875,7 +4881,7 @@ public class WebCallService extends Service {
 		Date wakeDate = new Date();
 		//Log.d(TAG,"onMessage incoming call: "+
 		//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
-		Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification");
+		Log.d(TAG,"onMessage incoming call: '"+contentText+"' Android10+ notification");
 
 		long eventMS = wakeDate.getTime();
 
@@ -4892,6 +4898,9 @@ public class WebCallService extends Service {
 		if(waitingCaller) {
 			denyIntent.putExtra("denyID", callerID);
 		}
+
+		Intent dummyIntent = new Intent("serviceCmdReceiver");
+		denyIntent.putExtra("dummy", "true");
 
 		NotificationCompat.Builder notificationBuilder =
 			new NotificationCompat.Builder(context, NOTIF_HIGH)
@@ -4925,14 +4934,16 @@ public class WebCallService extends Service {
 
 				// clicking on the area behind the action buttons will (also) switchTo activty
 				.setFullScreenIntent(
-					PendingIntent.getActivity(context, 1, switchToIntent,
+// replace this with dummy: because it is invoked automatically when the device is in sleep mode
+//					PendingIntent.getActivity(context, 1, switchToIntent,
+					PendingIntent.getActivity(context, 1, dummyIntent,
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
 
 				.setContentText(contentText);
 
 		Notification notification = notificationBuilder.build();
 		notificationManager.notify(NOTIF_ID2, notification);
-		Log.d(TAG,"onMessage incoming call: "+contentText+", Android10+ notification sent");
+		//Log.d(TAG,"onMessage incoming call: '"+contentText+"' Android10+ notification sent");
 
 		// send log RING to server
 		String ringMsg = "log|callee Incoming /";
