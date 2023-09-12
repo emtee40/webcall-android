@@ -4200,7 +4200,16 @@ public class WebCallService extends Service {
 	}
 
 	private WebSocketClient connectHost(String setAddr, boolean auto) {
-		Log.d(TAG,"connectHost("+setAddr+")");
+		if(setAddr=="") {
+			if(wsAddr!="") {
+				setAddr = wsAddr;
+				Log.d(TAG,"connectHost("+setAddr+") no given setAddr, using wsAddr from service");
+			} else {
+				Log.d(TAG,"# connectHost("+setAddr+") no given setAddr, no wsAddr from service");
+			}
+		} else {
+			Log.d(TAG,"connectHost("+setAddr+") using given setAddr");
+		}
 		stopSelfFlag = false;
 		try {
 			if(!setAddr.equals("")) {
@@ -4909,7 +4918,7 @@ public class WebCallService extends Service {
 				.setOngoing(true)
 				.setCategory(NotificationCompat.CATEGORY_CALL)
 				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-				//.setLights(0xff00ff00, 300, 100)			// TODO does not seem to work on N7
+				//.setLights(0xff00ff00, 300, 100)	// does not seem to work on N7
 
 				// on O+ setPriority is ignored in favor of notifChannel (NOTIF_P2P)
 				.setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -4934,8 +4943,8 @@ public class WebCallService extends Service {
 
 				// clicking on the area behind the action buttons will (also) switchTo activty
 				.setFullScreenIntent(
-// replace this with dummy: because it is invoked automatically when the device is in sleep mode
-//					PendingIntent.getActivity(context, 1, switchToIntent,
+				// replace this with dummy: because it is invoked automatically when the device is in sleep mode
+				//	PendingIntent.getActivity(context, 1, switchToIntent,
 					PendingIntent.getActivity(context, 1, dummyIntent,
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
 
@@ -4955,8 +4964,6 @@ public class WebCallService extends Service {
 		} catch(Exception ex) {
 			Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
 		}
-
-		//startRinging();
 	}
 
 	private void statusMessage(String message, int timeoutMs, boolean notifi) {
