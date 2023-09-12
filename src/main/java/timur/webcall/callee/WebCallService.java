@@ -633,6 +633,7 @@ public class WebCallService extends Service {
 					if(myWebView!=null && webviewMainPageLoaded) {
 						Log.d(TAG, "serviceCmdReceiver muteMic");
 						runJS("muteMicElement.checked = !muteMicElement.checked; muteMic(muteMicElement.checked);",null);
+						// will call muteStateChange(flag)
 					} else {
 						Log.d(TAG, "# serviceCmdReceiver muteMic but no webview");
 					}
@@ -1963,6 +1964,7 @@ public class WebCallService extends Service {
 			callPickedUpFlag=false;
 
 			if(wsClient!=null) {
+// TODO since we are in a call, this is NOT correct
 				statusMessage(readyToReceiveCallsString,-1,true);
 			} else {
 				statusMessage(offlineMessage,-1,true);
@@ -1982,10 +1984,13 @@ public class WebCallService extends Service {
 		public void muteStateChange(boolean muteState) {
 			Log.d(TAG,"JS muteStateChange("+muteState+")"+
 				" callPickedUpFlag="+callPickedUpFlag+" peerConnectFlag="+peerConnectFlag+" wsClient="+(wsClient!=null));
-//			if(callPickedUpFlag || peerConnectFlag) {
-				micMuteState = muteState;
-//				updateNotification(""); // for the server: repeat lastStatusMessage
-//			}
+			micMuteState = muteState;
+
+			// updateNotification("") is needed for the 2-button notification to update mute-label and text (unmuted)
+			// basically what we want is callInProgressNotification() to be called again
+			if(peerConnectFlag /*|| callPickedUpFlag*/) {
+				updateNotification(""); // just repeat the lastStatusMessage
+			}
 		}
 
 		@android.webkit.JavascriptInterface
@@ -4920,7 +4925,7 @@ public class WebCallService extends Service {
 				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 				//.setLights(0xff00ff00, 300, 100)	// does not seem to work on N7
 
-				// on O+ setPriority is ignored in favor of notifChannel (NOTIF_P2P)
+				// on O+ setPriority is ignored in favor of notifChannel NOTIF_HIGH / NOTIF_ID2
 				.setPriority(NotificationCompat.PRIORITY_HIGH)
 
 				.addAction(R.mipmap.notification_icon,"Accept",
@@ -5015,6 +5020,7 @@ public class WebCallService extends Service {
 		} else {
 			if(peerConnectFlag) {
 				Log.d(TAG,"updateNotification message="+message+" (->callInProg)");
+// TODO at this point, getStats (Connected p2p/p2p) was most likely not yet retrieved
 				callInProgressNotification(message);
 				return;
 			}
@@ -5039,25 +5045,23 @@ public class WebCallService extends Service {
 		long eventMS = wakeDate.getTime();
 
 		Intent muteIntent = new Intent("serviceCmdReceiver");
-		muteIntent.putExtra("muteMic", "true");		// like "denyCall"
+		muteIntent.putExtra("muteMic", "true");
 
 		Intent hangupIntent = new Intent("serviceCmdReceiver");
-		hangupIntent.putExtra("hangup", "true");		// like "denyCall"
+		hangupIntent.putExtra("hangup", "true");
 
-		Intent switchToIntent =	new Intent(context, WebCallCalleeActivity.class);
-		switchToIntent.putExtra("wakeup", "call");
-		switchToIntent.putExtra("date", eventMS);
+		Intent switchToIntent = new Intent(this, WebCallCalleeActivity.class);
 
 		String title = callInProgressMessage;
 		String muteButtonLabel = "Mute";
 		if(micMuteState) {
-			title = callInProgressMessage+" (mic muted)";
+			title = callInProgressMessage + " (mic muted)";
 			muteButtonLabel = "Unmute";
 		}
 
 		String dispMsg = message;
 		if(dispMsg.equals(readyToReceiveCallsString)) {
-			dispMsg = connectedToServerString; // "Connected in standby"
+			dispMsg = connectedToServerString; // "Connected"
 		}
 
 		if(!dispMsg.equals("")) {
@@ -5067,15 +5071,44 @@ public class WebCallService extends Service {
 		Log.d(TAG,"callInProgressNotif title="+title+" dispMsg="+dispMsg);
 
 		NotificationCompat.Builder notificationBuilder =
-			new NotificationCompat.Builder(context, NOTIF_LOW)
+			new NotificationCompat.Builder(this, NOTIF_LOW)
+				.setContentTitle(title) // 1st line
+				.setPriority(NotificationCompat.PRIORITY_LOW) // on O+ setPriority is ignored in favor of notifChannel
+				.setOngoing(true)
+				.setSmallIcon(R.mipmap.notification_icon)
+				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+				.setCategory(NotificationCompat.CATEGORY_CALL)
+
+				.addAction(R.mipmap.notification_icon, "Hangup",
+					PendingIntent.getBroadcast(context, 2, hangupIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.addAction(R.mipmap.notification_icon, muteButtonLabel,
+					PendingIntent.getBroadcast(context, 3, muteIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+//				.setFullScreenIntent(
+//					PendingIntent.getActivity(context, 1, switchToPendingIntent,
+//						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
+				.setContentIntent(
+					PendingIntent.getActivity(this, 0, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.setContentText(dispMsg); // 2nd line
+
+/*
+
+		NotificationCompat.Builder notificationBuilder =
+//			new NotificationCompat.Builder(context, NOTIF_LOW)
+			new NotificationCompat.Builder(this, NOTIF_LOW)
 				.setSmallIcon(R.mipmap.notification_icon)
 				.setContentTitle(title)
 				.setOngoing(true)
-				.setCategory(NotificationCompat.CATEGORY_CALL)
+//				.setCategory(NotificationCompat.CATEGORY_CALL)
+//				.setCategory(NotificationCompat.CATEGORY_PROGRESS)
 				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
 				// on O+ setPriority is ignored in favor of notifChannel (NOTIF_P2P)
-				.setPriority(NotificationCompat.PRIORITY_HIGH)
+				.setPriority(NotificationCompat.PRIORITY_LOW)
 
 				.addAction(R.mipmap.notification_icon, "Hangup",
 					PendingIntent.getBroadcast(context, 2, hangupIntent,
@@ -5097,7 +5130,7 @@ public class WebCallService extends Service {
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
 
 				.setContentText(dispMsg);
-
+*/
 		Notification notification = notificationBuilder.build();
 		notificationManager.notify(NOTIF_ID1, notification);
 		//Log.d(TAG,"callInProgressNotification: Android10+ notification sent");
