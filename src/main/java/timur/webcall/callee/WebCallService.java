@@ -4894,9 +4894,9 @@ public class WebCallService extends Service {
 
 		// activity is NOT visible
 		Date wakeDate = new Date();
-		//Log.d(TAG,"onMessage incoming call: "+
+		//Log.d(TAG,"incomingCall: "+
 		//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
-		Log.d(TAG,"onMessage incoming call: '"+contentText+"' Android10+ notification");
+		Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification");
 
 		long eventMS = wakeDate.getTime();
 
@@ -4948,17 +4948,21 @@ public class WebCallService extends Service {
 				//.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
 
 				// clicking on the area behind the action buttons will (also) switchTo activty
-				.setFullScreenIntent(
-				// replace this with dummy: because it is invoked automatically when the device is in sleep mode
+				// replace this with dummdummyIntent: because it is invoked automatically when the device is in sleep mode
 				//	PendingIntent.getActivity(context, 1, switchToIntent,
-					PendingIntent.getActivity(context, 1, dummyIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
+				//	PendingIntent.getActivity(context, 1, dummyIntent,
+//				.setFullScreenIntent( // will launch the intent, aka start the activity, without the user doing anything
+//					PendingIntent.getActivity(context, 1, switchToIntent,
+//						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
+				.setContentIntent( // will show the notification and only launch the intent if user clicks
+					PendingIntent.getActivity(context, 1, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
 
 				.setContentText(contentText);
 
 		Notification notification = notificationBuilder.build();
 		notificationManager.notify(NOTIF_ID2, notification);
-		//Log.d(TAG,"onMessage incoming call: '"+contentText+"' Android10+ notification sent");
+		//Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification sent");
 
 		// send log RING to server
 		String ringMsg = "log|callee Incoming /";
