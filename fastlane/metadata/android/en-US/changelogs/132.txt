@@ -3,9 +3,10 @@ with WebCall Server 4.0
 - User-Defined Custom IDs
 - New Call Screen
 - Notification support for Android 7.0-13.0
-- Hangup and Mute from Notification
+- Hangup and Mute from the Notification
 - New Quick Setting Tile
 - Much improved User Interface
-- Low Power Consumption
+- Server can be disconnected while in call
+- Ultra Low Power Consumption
 - Many Bugfixes
 

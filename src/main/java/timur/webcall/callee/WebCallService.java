@@ -369,7 +369,7 @@ public class WebCallService extends Service {
 			if(connectToServerIsWanted) {
 				Log.d(TAG, "onUnbind connectToServerIsWanted: no exitService() connected="+(wsClient!=null));
 			} else {
-				Log.d(TAG, "! onUnbind: exitService() ---- not called ---- connected="+(wsClient!=null));
+				Log.d(TAG, "! onUnbind: exitService() not called, connected="+(wsClient!=null));
 				// not call exitService() because: "startForegroundService() did not then call Service.startForeground()"
 				//exitService();
 			}
@@ -457,25 +457,8 @@ public class WebCallService extends Service {
 		// activity killed (webview gone), service still alive
 		super.onTaskRemoved(rootIntent);
 		Log.d(TAG, "onTaskRemoved "+rootIntent.toString()+" connected="+(wsClient!=null));
-		webSettings = null;
-		webviewCookies = null;
-		//webCallJSInterface = null;
-		//webCallJSInterfaceMini = null;
-		if(myWebView!=null) {
-			Log.d(TAG, "onTaskRemoved close webView");
-			final ViewGroup parent = (ViewGroup)myWebView.getParent();
-			if(parent != null) {
-				Log.d(TAG, "onTaskRemoved parent.removeView(myWebView)");
-				parent.removeView(myWebView);
-			}
-			myWebView.removeAllViews();
-			myWebView.destroy();
-			myWebView = null;
-		}
-		webviewMainPageLoaded = false;
-		currentUrl=null;
+		closeWebView("onTaskRemoved");
 		activityVisible=false;
-		calleeIsReady=false;
 		System.gc();
 		Log.d(TAG, "onTaskRemoved done connected="+(wsClient!=null));
 	}
@@ -1751,21 +1734,8 @@ public class WebCallService extends Service {
 		public void activityDestroyed() {
 			// activity is telling us that it is being destroyed
 			// TODO this should set webviewPageLoaded=false, needed for next incoming call ???
+			closeWebView("activityDestroyed");
 			activityVisible = false;
-			webviewMainPageLoaded = false;
-			if(myWebView!=null) {
-				Log.d(TAG, "activityDestroyed close webView");
-				final ViewGroup parent = (ViewGroup)myWebView.getParent();
-				if(parent != null) {
-					Log.d(TAG, "activityDestroyed parent.removeView(myWebView)");
-					parent.removeView(myWebView);
-				}
-				myWebView.removeAllViews();
-				myWebView.destroy();
-				myWebView = null;
-				webSettings = null;
-				webviewCookies = null;
-			}
 			if(connectToServerIsWanted) {
 				Log.d(TAG, "activityDestroyed got connectToServerIsWanted - do nothing");
 				// do nothing
@@ -2308,7 +2278,7 @@ public class WebCallService extends Service {
 				Log.d(TAG,"isActivityInteractive false (!webviewMainPageLoaded)");
 				return false;
 			}
-			Log.d(TAG,"isActivityInteractive true");
+			//Log.d(TAG,"isActivityInteractive true");
 			return true;
 		}
 
@@ -2489,33 +2459,21 @@ public class WebCallService extends Service {
 		@android.webkit.JavascriptInterface
 		public void wsExit() {
 			// called by Exit button
+			// end peercon, stopRinging(), clear callPickedUpFlag
 			Log.d(TAG,"JS wsExit -> endWebRtcSession()");
 			endWebRtcSession(true);
-
-			// hangup peercon, clear callPickedUpFlag, stopRinging();
-			Log.d(TAG,"JS wsExit -> endPeerCon()");
 			endPeerCon();
 
-			if(myWebView!=null) {
-				Log.d(TAG, "JS wsExit close webView");
-				final ViewGroup parent = (ViewGroup)myWebView.getParent();
-				if(parent != null) {
-					Log.d(TAG, "JS wsExit parent.removeView(myWebView)");
-					parent.removeView(myWebView);
-				}
-				myWebView.removeAllViews();
-				myWebView.destroy();
-				myWebView = null;
-			}
-			webviewMainPageLoaded = false;
-
-			// disconnect from webcall server
+			// disconnect from webcall server, turn off tile
 			Log.d(TAG,"JS wsExit -> disconnectHost()");
 			disconnectHost(true,false); // sendNotif skipStopForeground
 
 			// tell activity to force close
 			Log.d(TAG,"JS wsExit shutdown activity");
 			postStatus("cmd", "shutdown");
+
+			// myWebView = null
+			closeWebView("wsExit");
 
 			exitService();
 			Log.d(TAG,"JS wsExit done");
@@ -2986,7 +2944,7 @@ public class WebCallService extends Service {
 				// always let callerOffer and missedCalls through
 				// but everything else needs incomingCall==true to be processed
 				if(!message.startsWith("callerOffer|") && !message.startsWith("missedCalls|") && !incomingCall) {
-					Log.d(TAG,"onMessage "+message+", no incomingCall (activity not running)");
+					//Log.d(TAG,"onMessage "+message+", no incomingCall (activity not running)");
 					return;
 				}
 
@@ -3578,25 +3536,6 @@ public class WebCallService extends Service {
 							// this happens on SDK<O (Gnex) when webview+callee.js was started on incoming call
 							// but also if callee rejects a normal call
 							//Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag");
-/*
-							updateNotification("Failed to establish p2p connection");
-
-							// now make sure we get back to readyToReceiveCallsString
-							final Runnable runnable3 = new Runnable() {
-								public void run() {
-									if(!serviceAlive) {
-										return;
-									}
-									// TODO if lastMsg is NOT 'Failed to establish...' do nothing
-									if(wsClient!=null) {
-										updateNotification(readyToReceiveCallsString);
-									} else {
-										updateNotification(offlineMessage);
-									}
-								}
-							};
-							scheduler.schedule(runnable3, 5000l, TimeUnit.MILLISECONDS);
-*/
 						}
 					}
 				}
@@ -3817,7 +3756,7 @@ public class WebCallService extends Service {
 					}
 
 					if(myWebView!=null) {
-						// tmtmtm Mulch webview crash
+						// avoid Mulch webview crash
 						CookieManager.getInstance().setAcceptCookie(true);
 						if(webviewCookies==null) {
 							webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
@@ -5564,6 +5503,38 @@ public class WebCallService extends Service {
 			runJS("showStatus('"+lastStatusMessage+"',-1);",null);
 			lastStatusMessage="";
 		}
+	}
+
+	private void closeWebView(String comment) {
+		Log.d(TAG, "closeWebView "+comment);
+		if(myWebView!=null) {
+			/* we let the activity take care of doing this
+			try {
+				Log.d(TAG, "closeWebView stopLoading");
+				myWebView.stopLoading();
+				myWebView.clearCache(true);
+				//myWebView.loadUrl("about:blank");
+				myWebView.onPause();
+				final ViewGroup parent = (ViewGroup)myWebView.getParent();
+				if(parent != null) {
+					Log.d(TAG, "closeWebView parent.removeView(myWebView)");
+					parent.removeView(myWebView);
+				}
+				myWebView.removeAllViews();
+				myWebView.destroy();
+			} catch(Exception ex) {
+				Log.d(TAG, "closeWebView destroy ex="+ex);
+			}
+			*/
+			myWebView = null;
+		}
+		webSettings = null;
+		webviewCookies = null;
+		webviewMainPageLoaded = false;
+		currentUrl=null;
+		calleeIsReady=false;
+		//webCallJSInterface = null;
+		//webCallJSInterfaceMini = null;
 	}
 }
 

@@ -166,13 +166,17 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		activity = this;
 
 		// call getCurrentWebViewPackageInfo() to get webview versionName, may fail on old Android / old webview
-		PackageInfo webviewPackageInfo = getCurrentWebViewPackageInfo();
+		PackageInfo webviewPackageInfo = null;
+
+		webviewPackageInfo = getCurrentWebViewPackageInfo();
 		if(webviewPackageInfo != null) {
 			Log.d(TAG, "onCreate webview packageInfo "+
 				webviewPackageInfo.packageName+" "+webviewPackageInfo.versionName);
 		}
+
 		// the real webview test comes here and we MUST try/catch
 		try {
+			Log.d(TAG, "onCreate setContentView(R.layout.activity_main)");
 			setContentView(R.layout.activity_main);
 		} catch(Exception ex) {
 			Log.d(TAG, "# onCreate setContentView ex="+ex);
@@ -181,6 +185,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				Toast.LENGTH_LONG).show();
 			return;
 		}
+
 		if(webviewPackageInfo == null) {
 			// on Android 6 + 7: reflection + getLoadedPackageInfo() will only work AFTER webview was activated
 			Log.d(TAG, "onCreate webviewPackageInfo not set");
@@ -192,7 +197,10 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 
 		if(powerManager==null) {
+			Log.d(TAG, "onCreate getSystemService(POWER_SERVICE)");
 			powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+		} else {
+			Log.d(TAG, "onCreate powerManager!=null");
 		}
 		if(powerManager==null) {
 			Log.d(TAG, "onCreate powerManager==null");
@@ -208,6 +216,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 
 		if(keyguardManager==null) {
+			Log.d(TAG, "onCreate getSystemService(Context.KEYGUARD_SERVICE)");
 			keyguardManager = (KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE);
 		}
 		if(keyguardManager==null) {
@@ -215,6 +224,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			return;
 		}
 
+		Log.d(TAG, "onCreate proximitySensorEventListener");
 		proximitySensorEventListener = new SensorEventListener() {
 			@Override
 			public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -240,6 +250,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		};
 
 		if(prefs==null) {
+			Log.d(TAG, "onCreate getDefaultSharedPreferences()");
 			prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		}
 		if(prefs!=null) {
@@ -255,6 +266,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			}
 		}
 
+		Log.d(TAG, "onCreate findViewById R.id.webview");
 		View mainView = findViewById(R.id.webview);
 		if(mainView!=null) {
 			mainView.setOnTouchListener(new View.OnTouchListener() {
@@ -284,11 +296,13 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			});
 		}
 
+		Log.d(TAG, "onCreate findViewById R.id.webview");
 		myWebView = findViewById(R.id.webview);
 		myNewWebView = (WebView)findViewById(R.id.webview2);
 		myNewWebView.setVisibility(View.INVISIBLE);
 
 		if(downloadManager==null) {
+			Log.d(TAG, "onCreate getSystemService(DOWNLOAD_SERVICE)");
 			downloadManager = (DownloadManager)getSystemService(DOWNLOAD_SERVICE);
 		}
 
@@ -549,6 +563,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				//Log.d(TAG, "# broadcastReceiver unknown cmd "+intent.toString());
 			}
 		};
+		Log.d(TAG, "onCreate registerReceiver broadcastReceiver");
 		registerReceiver(broadcastReceiver, new IntentFilter("webcall"));
 
 		onDownloadComplete = new BroadcastReceiver() {
@@ -618,6 +633,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				}
 			}
 		};
+		Log.d(TAG, "onCreate registerReceiver onDownloadComplete");
 		registerReceiver(onDownloadComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
 
 		/* for testing/verification only
@@ -680,13 +696,16 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		serviceIntent.putExtra("onstart", "donothing");
 		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
 			// foreground service
+			Log.d(TAG, "onCreate startForegroundService");
 			startForegroundService(serviceIntent);
 		} else {
 			// regular service
+			Log.d(TAG, "onCreate startService");
 			startService(serviceIntent);
 		}
 
 		// here we bind the service, so that we can call startWebView()
+		Log.d(TAG, "onCreate bindService");
 		bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
 		// onServiceConnected -> webCallServiceBinder.startWebView()
 
@@ -1352,24 +1371,40 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 		}
 		if(myNewWebView!=null) {
 			Log.d(TAG, "onDestroy myNewWebView.destroy()");
-			final ViewGroup parent = (ViewGroup)myNewWebView.getParent();
-			if(parent != null) {
-				parent.removeView(myNewWebView);
+			try {
+				myNewWebView.stopLoading();
+				myNewWebView.clearCache(true);
+				//myNewWebView.loadUrl("about:blank");
+				myNewWebView.onPause();
+				final ViewGroup parent = (ViewGroup)myNewWebView.getParent();
+				if(parent != null) {
+					parent.removeView(myNewWebView);
+				}
+				myNewWebView.removeAllViews();
+				//myNewWebView.clearCache(true);
+				myNewWebView.destroy();
+			} catch(Exception ex) {
+				Log.d(TAG, "onDestroy myNewWebView.destroy ex="+ex);
 			}
-			myNewWebView.removeAllViews();
-			//myNewWebView.clearCache(true);
-			myNewWebView.destroy();
 			myNewWebView=null;
 		}
 		if(myWebView!=null) {
 			Log.d(TAG, "onDestroy myWebView.destroy()");
-			final ViewGroup parent = (ViewGroup)myWebView.getParent();
-			if(parent != null) {
-				parent.removeView(myWebView);
+			try {
+				myWebView.stopLoading();
+				myWebView.clearCache(true);
+				//myWebView.loadUrl("about:blank");
+				myWebView.onPause();
+				final ViewGroup parent = (ViewGroup)myWebView.getParent();
+				if(parent != null) {
+					parent.removeView(myWebView);
+				}
+				myWebView.removeAllViews();
+				//myWebView.clearCache(true);
+				myWebView.destroy();
+			} catch(Exception ex) {
+				Log.d(TAG, "onDestroy myWebView.destroy ex="+ex);
 			}
-			myWebView.removeAllViews();
-			//myWebView.clearCache(true);
-			myWebView.destroy();
 			myWebView=null;
 			// TODO -> WebCallService: # serviceCmdReceiver skip on stopSelfFlag Intent { act=serviceCmdReceiver flg=0x10 (has extras) }
 		}
