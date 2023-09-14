@@ -3513,29 +3513,23 @@ public class WebCallService extends Service {
 						return;
 					}
 
-					Log.d(TAG,"-------- processWebRtcMessages delayed 5s "+ringFlag+" "+rtcConnectFlag);
+					//Log.d(TAG,"processWebRtcMessages 5s later "+ringFlag+" "+rtcConnectFlag);
 					if(autoPickup) {
 						// reset autoPickup after 5s, so that it can be used in rtcConnect
 						// and for it to definitely get cleared, even if rtcConnect does not occur
-						Log.d(TAG,"processWebRtcMessages delayed autoPickup=false");
+						Log.d(TAG,"processWebRtcMessages 5s later autoPickup=false");
 						autoPickup = false;
 					}
 					if(!rtcConnectFlag) {
 						// we failed to get connectionstatechange connected (no rtc connect)
 						if(ringFlag) {
-							// we are ringing -> stop the ringing
-							// this happens on SDK>=O when webview+callee.js was started on incoming call
-							// happens on P9, N7
+							// we are still ringing -> stop the ringing
+							// this should not anymore happen (since server-side caller early disconnect fix)
 							Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag -> stopRinging");
-							//updateNotification("Failed to establish p2p connection");
 							statusMessage("Failed to establish p2p connection",2000,true);
 							stopRinging("processWebRtcMessages end");
 							cancelIncomingCall();
-// TODO cancelIncomingCall() does not fully hangup the caller (something from endWebRtcSession() is missing)
-						} else {
-							// this happens on SDK<O (Gnex) when webview+callee.js was started on incoming call
-							// but also if callee rejects a normal call
-							//Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag");
+							// cancelIncomingCall() does not fully hangup caller (someth fr endWebRtcSession() is missing)
 						}
 					}
 				}
