@@ -2150,14 +2150,6 @@ public class WebCallService extends Service {
 		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
 			// called from gotStream2()
-/*
-			if(calleeIsReady) {
-				// this is NOT the 1st calleeReady()
-				// we only start processWebRtcMessages() on the 1st call
-				Log.d(TAG,"JS calleeReady() -> calleeIsReady was already set");
-				return false;
-			}
-*/
 			calleeIsReady = true;
 			if(!processWebRtcMessagesRunning) {
 				if(!stringMessageQueue.isEmpty()) {
@@ -2173,7 +2165,7 @@ public class WebCallService extends Service {
 						}
 					};
 					scheduler.schedule(runnable2, 50l, TimeUnit.MILLISECONDS);
-					// TODO when we return true, we will abort gotStream2 (not call prepareCallee())
+					// when we return true, we will abort gotStream2 (not call prepareCallee())
 					return true;
 				}
 				Log.d(TAG,"JS calleeReady() no queued WebRtcMessages()");
@@ -3513,11 +3505,11 @@ public class WebCallService extends Service {
 						return;
 					}
 
-					//Log.d(TAG,"processWebRtcMessages 5s later "+ringFlag+" "+rtcConnectFlag);
+					//Log.d(TAG,"processWebRtcMessages 3s later "+ringFlag+" "+rtcConnectFlag);
 					if(autoPickup) {
-						// reset autoPickup after 5s, so that it can be used in rtcConnect
+						// reset autoPickup after 3s, so that it can be used in rtcConnect
 						// and for it to definitely get cleared, even if rtcConnect does not occur
-						Log.d(TAG,"processWebRtcMessages 5s later autoPickup=false");
+						Log.d(TAG,"processWebRtcMessages 3s later autoPickup=false");
 						autoPickup = false;
 					}
 					if(!rtcConnectFlag) {
@@ -3525,16 +3517,16 @@ public class WebCallService extends Service {
 						if(ringFlag) {
 							// we are still ringing -> stop the ringing
 							// this should not anymore happen (since server-side caller early disconnect fix)
-							Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag -> stopRinging");
+							Log.d(TAG,"# processWebRtcMessages 3s later !rtcConnectFlag -> stopRinging");
 							statusMessage("Failed to establish p2p connection",2000,true);
-							stopRinging("processWebRtcMessages end");
+							stopRinging("processWebRtcMessages 3s later");
 							cancelIncomingCall();
 							// cancelIncomingCall() does not fully hangup caller (someth fr endWebRtcSession() is missing)
 						}
 					}
 				}
 			};
-			scheduler.schedule(runnable2, 5000l, TimeUnit.MILLISECONDS);
+			scheduler.schedule(runnable2, 3000l, TimeUnit.MILLISECONDS);
 		}
 	}
 
