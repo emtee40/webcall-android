@@ -60,6 +60,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.Window;
 import android.view.Display;
+import android.view.ViewGroup;
 import android.hardware.display.DisplayManager;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -258,10 +259,12 @@ public class WebCallService extends Service {
 	// webviewMainPageLoaded is set true if currentUrl is pointing to the main page
 	private static volatile boolean webviewMainPageLoaded = false;
 
+	private static volatile boolean rtcConnectFlag = false;
+
 	// callPickedUpFlag is set from pickup until peerConnect, activates proximitySensor
 	private static volatile boolean callPickedUpFlag = false;
 
-	// peerConnectFlag is set if full mediaConnect is established
+	// peerConnectFlag is set when full mediaConnect is established
 	private static volatile boolean peerConnectFlag = false;
 
 	// peerDisconnnectFlag is set when call is ended by endWebRtcSession() -> peerDisConnect()
@@ -344,6 +347,7 @@ public class WebCallService extends Service {
 	protected static volatile boolean serviceAlive = false;
 	private Context context = null;
 	private static volatile boolean micMuteState = false;
+	private static volatile boolean processWebRtcMessagesRunning = false;
 
 	// section 1: android service methods
 	@Override
@@ -383,7 +387,7 @@ public class WebCallService extends Service {
 
 	@Override
 	public void onDestroy() {
-		Log.d(TAG, "onDestroy connected="+(wsClient!=null));
+		Log.d(TAG, "---------- onDestroy connected="+(wsClient!=null));
 		if(alarmReceiver!=null) {
 			Log.d(TAG, "onDestroy unregisterReceiver alarmReceiver");
 			unregisterReceiver(alarmReceiver);
@@ -459,6 +463,12 @@ public class WebCallService extends Service {
 		//webCallJSInterfaceMini = null;
 		if(myWebView!=null) {
 			Log.d(TAG, "onTaskRemoved close webView");
+			final ViewGroup parent = (ViewGroup)myWebView.getParent();
+			if(parent != null) {
+				Log.d(TAG, "onTaskRemoved parent.removeView(myWebView)");
+				parent.removeView(myWebView);
+			}
+			myWebView.removeAllViews();
 			myWebView.destroy();
 			myWebView = null;
 		}
@@ -583,7 +593,7 @@ public class WebCallService extends Service {
 					if(myWebView!=null && webviewMainPageLoaded) {
 						if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 							// kickstart processWebRtcMessages()
-							Log.d(TAG, "serviceCmdReceiver showCall "+message);
+							Log.d(TAG, "serviceCmdReceiver showCall -> processWebRtcMessages "+message);
 							processWebRtcMessages();
 						}
 					}
@@ -704,6 +714,8 @@ public class WebCallService extends Service {
 				msg = readyToReceiveCallsString;
 				if(callPickedUpFlag || peerConnectFlag) {
 					msg = connectedToServerString;
+				} else if(ringFlag) {
+					msg = "Incoming call...";
 				}
 			}
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
@@ -1164,6 +1176,7 @@ public class WebCallService extends Service {
 					Log.d(TAG,"onStartCommand onStartIntent==null");
 					// service restart after crash
 					// autoCalleeConnect to webcall server if extraCommand.equals("connect")
+					autoCalleeStartDelay = 3; // seconds, value for start from tile
 					try {
 						boolean connectWanted = prefs.getBoolean("connectWanted", false);
 							//Log.d(TAG,"onStartCommand connectWanted force false");
@@ -1345,6 +1358,7 @@ public class WebCallService extends Service {
 						Log.d(TAG, "# onReceivedError code="+errorCode+" "+description+" "+failingUrl);
 						//intent.putExtra("toast", "Error "+errorCode+" "+description);
 						statusMessage("Connection error code="+errorCode+" "+description+" "+failingUrl,-1,true);
+// TODO if we have started ringing we need to abort it
 					}
 					//sendBroadcast(intent);
 				}
@@ -1530,17 +1544,19 @@ public class WebCallService extends Service {
 									Log.d(TAG,"onPageFinished main page: broadcast state connected");
 									postStatus("state","connected");
 
-									if(calleeIsReady) { // gotStream2() -> calleeReady() did already happen
-										// schedule delayed processWebRtcMessages()
-										final Runnable runnable2 = new Runnable() {
-											public void run() {
-												if(calleeIsReady) {
-													Log.d(TAG,"onPageFinished main page processWebRtcMessages");
-													processWebRtcMessages();
+									if(calleeIsReady) { // gotStream2() -> s) did already happen
+										if(!processWebRtcMessagesRunning) {
+											// schedule delayed processWebRtcMessages()
+											final Runnable runnable2 = new Runnable() {
+												public void run() {
+													if(calleeIsReady) {
+														Log.d(TAG,"onPageFinished main page processWebRtcMessages");
+														processWebRtcMessages();
+													}
 												}
-											}
-										};
-										scheduler.schedule(runnable2, 100l, TimeUnit.MILLISECONDS);
+											};
+											scheduler.schedule(runnable2, 100l, TimeUnit.MILLISECONDS);
+										}
 									} else {
 										// processWebRtcMessages() will be called from calleeReady()
 									}
@@ -1559,6 +1575,7 @@ public class WebCallService extends Service {
 					String msg = cm.message();
 					if(msg.startsWith("Uncaught")) {
 						Log.d(TAG,"# con: "+msg + " L"+cm.lineNumber());
+// TODO if we have started ringing we need to abort it
 					} else {
 						Log.d(TAG,"con: "+msg + " L"+cm.lineNumber());
 					}
@@ -1736,7 +1753,19 @@ public class WebCallService extends Service {
 			// TODO this should set webviewPageLoaded=false, needed for next incoming call ???
 			activityVisible = false;
 			webviewMainPageLoaded = false;
-			myWebView = null;
+			if(myWebView!=null) {
+				Log.d(TAG, "activityDestroyed close webView");
+				final ViewGroup parent = (ViewGroup)myWebView.getParent();
+				if(parent != null) {
+					Log.d(TAG, "activityDestroyed parent.removeView(myWebView)");
+					parent.removeView(myWebView);
+				}
+				myWebView.removeAllViews();
+				myWebView.destroy();
+				myWebView = null;
+				webSettings = null;
+				webviewCookies = null;
+			}
 			if(connectToServerIsWanted) {
 				Log.d(TAG, "activityDestroyed got connectToServerIsWanted - do nothing");
 				// do nothing
@@ -1964,8 +1993,6 @@ public class WebCallService extends Service {
 			callPickedUpFlag=false;
 
 			if(wsClient!=null) {
-				// since we are in a call, readyToReceiveCallsString is NOT correct
-				//statusMessage(readyToReceiveCallsString,-1,true);
 				statusMessage(connectedToServerString,-1,true);
 			} else {
 				statusMessage(offlineMessage,-1,true);
@@ -2146,32 +2173,41 @@ public class WebCallService extends Service {
 		}
 
 		@android.webkit.JavascriptInterface
+		public boolean isRinging() {
+			return ringFlag; // set by JS ringStart()
+		}
+
+		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
 			// called from gotStream2()
+/*
 			if(calleeIsReady) {
 				// this is NOT the 1st calleeReady()
 				// we only start processWebRtcMessages() on the 1st call
 				Log.d(TAG,"JS calleeReady() -> calleeIsReady was already set");
 				return false;
 			}
-
+*/
 			calleeIsReady = true;
-			if(!stringMessageQueue.isEmpty()) {
-				Log.d(TAG,"JS calleeReady() -> processWebRtcMessages()");
-				// we delay calling processWebRtcMessages() bc otherwise JS code will receive:
-				// "cmd callerCandidate !peerCon.remoteDescription"
-				// "callerOffer setRemoteDescription" needs some time to complete
-				final Runnable runnable2 = new Runnable() {
-					public void run() {
-						Log.d(TAG,"onPageFinished main page: processWebRtcMessages start");
-						processWebRtcMessages();
-					}
-				};
-				scheduler.schedule(runnable2, 100l, TimeUnit.MILLISECONDS);
-// TODO when we return true, we will abort gotStream2 (not call prepareCallee())
-				return true;
+			if(!processWebRtcMessagesRunning) {
+				if(!stringMessageQueue.isEmpty()) {
+					Log.d(TAG,"JS calleeReady() -> processWebRtcMessages() "+stringMessageQueue.size());
+					processWebRtcMessagesRunning = true;
+					// we delay calling processWebRtcMessages() bc otherwise JS code will receive:
+					// "cmd callerCandidate !peerCon.remoteDescription"
+					// "callerOffer setRemoteDescription" needs some time to complete
+					final Runnable runnable2 = new Runnable() {
+						public void run() {
+							Log.d(TAG,"---------- calleeReady() processWebRtcMessages start "+stringMessageQueue.size());
+							processWebRtcMessages();
+						}
+					};
+					scheduler.schedule(runnable2, 50l, TimeUnit.MILLISECONDS);
+					// TODO when we return true, we will abort gotStream2 (not call prepareCallee())
+					return true;
+				}
+				Log.d(TAG,"JS calleeReady() no queued WebRtcMessages()");
 			}
-			Log.d(TAG,"JS calleeReady() no queued WebRtcMessages()");
 			return false;
 		}
 
@@ -2253,13 +2289,27 @@ public class WebCallService extends Service {
 		}
 
 		@android.webkit.JavascriptInterface
+//		public boolean isJSUnconstrained() {	// better fkt-name?
 		public boolean isActivityInteractive() {
-			if(myWebView!=null && webviewMainPageLoaded && activityVisible) {
-				//Log.d(TAG,"isActivityInteractive true");
-				return true;
+			// despite it's name: this function returns true if webview can run JS unconstrained
+			if(powerManager.isDeviceIdleMode()) {
+				Log.d(TAG,"isActivityInteractive false (DeviceIdleMode)");
+				return false;
 			}
-			//Log.d(TAG,"isActivityInteractive false");
-			return false;
+			if(!activityVisible) {
+				Log.d(TAG,"isActivityInteractive false (!activityVisible)");
+				return false;
+			}
+			if(myWebView==null) {
+				Log.d(TAG,"isActivityInteractive false (myWebView==null)");
+				return false;
+			}
+			if(!webviewMainPageLoaded) {
+				Log.d(TAG,"isActivityInteractive false (!webviewMainPageLoaded)");
+				return false;
+			}
+			Log.d(TAG,"isActivityInteractive true");
+			return true;
 		}
 
 		@android.webkit.JavascriptInterface
@@ -2362,12 +2412,19 @@ public class WebCallService extends Service {
 
 			// making sure this is activated (if it is enabled)
 			audioToSpeakerSet(audioToSpeakerMode>0,false);
+			rtcConnectFlag = true;
 			peerDisconnnectFlag = false;
+
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+				// notification still showing ready to receive calls
+				updateNotification("Incoming call...");
+			}
 
 			if(activityVisible) {
 				Log.d(TAG,"JS rtcConnect() with activityVisible: not bringActivityToFront");
 			} else if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
 				// while phone is still ringing, keep sending wakeIntent to bringActivityToFront
+
 				final Runnable bringActivityToFront = new Runnable() {
 					public void run() {
 						if(!callPickedUpFlag && !peerConnectFlag && !peerDisconnnectFlag) {
@@ -2439,7 +2496,17 @@ public class WebCallService extends Service {
 			Log.d(TAG,"JS wsExit -> endPeerCon()");
 			endPeerCon();
 
-			myWebView = null;
+			if(myWebView!=null) {
+				Log.d(TAG, "JS wsExit close webView");
+				final ViewGroup parent = (ViewGroup)myWebView.getParent();
+				if(parent != null) {
+					Log.d(TAG, "JS wsExit parent.removeView(myWebView)");
+					parent.removeView(myWebView);
+				}
+				myWebView.removeAllViews();
+				myWebView.destroy();
+				myWebView = null;
+			}
 			webviewMainPageLoaded = false;
 
 			// disconnect from webcall server
@@ -2522,7 +2589,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean ringStart() {
-			ringFlag = true; // for isRingin()
+//			ringFlag = true; // for isRingin()
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 				startRinging();
 				return true;
@@ -2532,7 +2599,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean ringStop() {
-			ringFlag = false; // for isRingin()
+//			ringFlag = false; // for isRingin()
 			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 				stopRinging("JS"); // from callee.js stopAllAudioEffects()
 				return true;
@@ -2865,19 +2932,7 @@ public class WebCallService extends Service {
 					//Log.d(TAG,"onMessage cancel, -> JS endWebRtcSession()");
 					//endWebRtcSession(false);
 				} else {
-					// clear queueWebRtcMessage / stringMessageQueue
-					while(!stringMessageQueue.isEmpty()) {
-						stringMessageQueue.poll();
-					}
-					Log.d(TAG,"onMessage cancel, -> JS endPeerCon()");
-					endPeerCon();
-					if(wsClient!=null && connectToServerIsWanted) {
-						Log.d(TAG,"onMessage cancel, send init...");
-						wsClient.send("init|");
-						// wait for sessionID
-					} else {
-						statusMessage(offlineMessage,-1,true);
-					}
+					cancelIncomingCall();
 				}
 				Log.d(TAG,"onMessage cancel done");
 			}
@@ -3180,12 +3235,13 @@ public class WebCallService extends Service {
 	private void startRinging() {
 		if(ringPlayer!=null) {
 			// ringtone already playing
-			Log.d(TAG,"! startRinging skip: ringtone already playing");
+			Log.d(TAG,"! startRinging: ringtone already playing");
 			return;
 		}
 
 		// start playing ringtone
 		Log.d(TAG,"startRinging");
+		ringFlag = true; // for isRingin()
 
 		audioToSpeakerSet(audioToSpeakerMode>0,false);
 
@@ -3227,6 +3283,7 @@ public class WebCallService extends Service {
 	private void stopRinging(String comment) {
 		// stop playing the ringtone
 		Log.d(TAG,"stopRinging from=("+comment+")");
+		ringFlag = false; // for isRingin()
 		if(ringPlayer!=null) {
 			ringPlayer.stop();
 			ringPlayer = null;
@@ -3244,8 +3301,13 @@ public class WebCallService extends Service {
 		// problem: statusMessage() (runJS) is not always executed in doze mode
 		// we need a method to display the last msg when device gets out of doze
 		// see: lastStatusMessage
-		Log.d(TAG,"calleeIsConnected() status(readyToReceiveCallsString)");
-		statusMessage(readyToReceiveCallsString,-1,true);
+		if(ringFlag) {
+			Log.d(TAG,"calleeIsConnected() status('Incoming call')");
+			statusMessage("Incoming call",-1,true);
+		} else {
+			Log.d(TAG,"calleeIsConnected() status(readyToReceiveCallsString)");
+			statusMessage(readyToReceiveCallsString,-1,true);
+		}
 
 		// peerConCreateOffer() does not trigger onIceCandidate() callbacks
 		//runJS("peerConCreateOffer();",null);
@@ -3484,18 +3546,62 @@ public class WebCallService extends Service {
 
 		} else {
 			Log.d(TAG,"processWebRtcMessages end");
+			processWebRtcMessagesRunning = false;
 
-			if(autoPickup) {
-				// reset autoPickup in 5s, so that it can be used in rtcConnect
-				// and for it to definitely get cleared, even if rtcConnect does not occur
-				final Runnable runnable2 = new Runnable() {
-					public void run() {
+			// post processing for processWebRtcMessages
+			final Runnable runnable2 = new Runnable() {
+				public void run() {
+					if(!serviceAlive) {
+						return;
+					}
+
+					Log.d(TAG,"-------- processWebRtcMessages delayed 5s "+ringFlag+" "+rtcConnectFlag);
+					if(autoPickup) {
+						// reset autoPickup after 5s, so that it can be used in rtcConnect
+						// and for it to definitely get cleared, even if rtcConnect does not occur
 						Log.d(TAG,"processWebRtcMessages delayed autoPickup=false");
 						autoPickup = false;
 					}
-				};
-				scheduler.schedule(runnable2, 5000l, TimeUnit.MILLISECONDS);
-			}
+					if(!rtcConnectFlag) {
+						// we failed to get connectionstatechange connected (no rtc connect)
+						if(ringFlag) {
+							// we are ringing -> stop the ringing
+							// this happens on SDK>=O when webview+callee.js was started on incoming call
+							// happens on P9, N7
+							Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag -> stopRinging");
+							//updateNotification("Failed to establish p2p connection");
+							statusMessage("Failed to establish p2p connection",2000,true);
+							stopRinging("processWebRtcMessages end");
+							cancelIncomingCall();
+// TODO cancelIncomingCall() does not fully hangup the caller (something from endWebRtcSession() is missing)
+						} else {
+							// this happens on SDK<O (Gnex) when webview+callee.js was started on incoming call
+							// but also if callee rejects a normal call
+							//Log.d(TAG,"# processWebRtcMessages delayed !rtcConnectFlag");
+/*
+							updateNotification("Failed to establish p2p connection");
+
+							// now make sure we get back to readyToReceiveCallsString
+							final Runnable runnable3 = new Runnable() {
+								public void run() {
+									if(!serviceAlive) {
+										return;
+									}
+									// TODO if lastMsg is NOT 'Failed to establish...' do nothing
+									if(wsClient!=null) {
+										updateNotification(readyToReceiveCallsString);
+									} else {
+										updateNotification(offlineMessage);
+									}
+								}
+							};
+							scheduler.schedule(runnable3, 5000l, TimeUnit.MILLISECONDS);
+*/
+						}
+					}
+				}
+			};
+			scheduler.schedule(runnable2, 5000l, TimeUnit.MILLISECONDS);
 		}
 	}
 
@@ -3710,9 +3816,12 @@ public class WebCallService extends Service {
 						});
 					}
 
-					CookieManager.getInstance().setAcceptCookie(true);
-					if(webviewCookies==null) {
-						webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
+					if(myWebView!=null) {
+						// tmtmtm Mulch webview crash
+						CookieManager.getInstance().setAcceptCookie(true);
+						if(webviewCookies==null) {
+							webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
+						}
 					}
 					if(webviewCookies!=null) {
 						//if(extendedLogsFlag) {
@@ -4320,12 +4429,14 @@ public class WebCallService extends Service {
 							Log.d(TAG,"connectHost get cookies from currentUrl="+currentUrl);
 						}
 						if(!currentUrl.equals("")) {
-							webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
-							if(extendedLogsFlag) {
-								Log.d(TAG,"connectHost webviewCookies="+webviewCookies);
-							}
-							if(webviewCookies!=null && !webviewCookies.equals("")) {
-								storePrefsString("cookies", webviewCookies);
+							if(myWebView!=null) {
+								webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
+								if(extendedLogsFlag) {
+									Log.d(TAG,"connectHost webviewCookies="+webviewCookies);
+								}
+								if(webviewCookies!=null && !webviewCookies.equals("")) {
+									storePrefsString("cookies", webviewCookies);
+								}
 							}
 						}
 					}
@@ -4611,6 +4722,7 @@ public class WebCallService extends Service {
 		callPickedUpFlag = false;
 		peerConnectFlag = false;
 		peerDisconnnectFlag = true;
+		rtcConnectFlag = false;
 	}
 
 	private void endWebRtcSession(boolean disconnectCaller) {
@@ -4881,101 +4993,6 @@ public class WebCallService extends Service {
 	}
 
 
-	private void incomingCall(String callerID, String callerName, String txtMsg, boolean waitingCaller) {
-		String contentText = callerName+" "+callerID;
-		if(textmode.equals("true")) { // set by signalingCommand()
-			contentText += " TextMode ";
-		}
-		if(txtMsg!="") {
-			contentText += " \""+txtMsg+"\""; // greeting msg
-		}
-
-		incomingCall = true;
-
-		// activity is NOT visible
-		Date wakeDate = new Date();
-		//Log.d(TAG,"incomingCall: "+
-		//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
-		Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification");
-
-		long eventMS = wakeDate.getTime();
-
-		Intent acceptIntent = new Intent(context, WebCallCalleeActivity.class);
-		acceptIntent.putExtra("wakeup", "pickup");
-		acceptIntent.putExtra("date", eventMS);
-
-		Intent switchToIntent =	new Intent(context, WebCallCalleeActivity.class);
-		switchToIntent.putExtra("wakeup", "call");
-		switchToIntent.putExtra("date", eventMS);
-
-		Intent denyIntent = new Intent("serviceCmdReceiver");
-		denyIntent.putExtra("denyCall", "true");
-		if(waitingCaller) {
-			denyIntent.putExtra("denyID", callerID);
-		}
-
-		Intent dummyIntent = new Intent("serviceCmdReceiver");
-		denyIntent.putExtra("dummy", "true");
-
-		NotificationCompat.Builder notificationBuilder =
-			new NotificationCompat.Builder(context, NOTIF_HIGH)
-				.setSmallIcon(R.mipmap.notification_icon)
-				.setContentTitle("WebCall incoming")
-				.setOngoing(true)
-				.setCategory(NotificationCompat.CATEGORY_CALL)
-				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-				//.setLights(0xff00ff00, 300, 100)	// does not seem to work on N7
-
-				// on O+ setPriority is ignored in favor of notifChannel NOTIF_HIGH / NOTIF_ID2
-				.setPriority(NotificationCompat.PRIORITY_HIGH)
-
-				.addAction(R.mipmap.notification_icon,"Accept",
-					PendingIntent.getActivity(context, 2, acceptIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-				.addAction(R.mipmap.notification_icon,"Switch",
-					PendingIntent.getActivity(context, 3, switchToIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-				.addAction(R.mipmap.notification_icon,"Reject",
-					PendingIntent.getBroadcast(context, 4, denyIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-				//.setAutoCancel(true) // any click will close the notification
-				// if this is false, any click will switchTo activity
-
-				// we are using our own ringtone (see startRinging())
-				//.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-
-				// clicking on the area behind the action buttons will (also) switchTo activty
-				// replace this with dummdummyIntent: because it is invoked automatically when the device is in sleep mode
-				//	PendingIntent.getActivity(context, 1, switchToIntent,
-				//	PendingIntent.getActivity(context, 1, dummyIntent,
-//				.setFullScreenIntent( // will launch the intent, aka start the activity, without the user doing anything
-//					PendingIntent.getActivity(context, 1, switchToIntent,
-//						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
-				.setContentIntent( // will show the notification and only launch the intent if user clicks
-					PendingIntent.getActivity(context, 1, switchToIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
-
-				.setContentText(contentText);
-
-		Notification notification = notificationBuilder.build();
-		notificationManager.notify(NOTIF_ID2, notification);
-		//Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification sent");
-
-		// send log RING to server
-		String ringMsg = "log|callee Incoming /";
-		// do this later when all deployed server can cope without 3rd arg
-		//String ringMsg = "log|callee Incoming";
-		Log.d(TAG,"wsClient.send RING-log "+ringMsg);
-		try {
-			wsClient.send(ringMsg);
-		} catch(Exception ex) {
-			Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
-		}
-	}
-
 	private void statusMessage(String message, int timeoutMs, boolean notifi) {
 		// webcall status msg + android notification (if notifi + important are true)
 		//Log.d(TAG,"statusMessage: "+message+" n="+notifi);
@@ -5040,6 +5057,25 @@ public class WebCallService extends Service {
 		}
 	}
 
+	private Notification buildServiceNotification(String msg, String notifChannel, int prio) {
+		// only call with Build.VERSION.SDK_INT >= Build.VERSION_CODES.O // >= 26
+		Intent notificationIntent = new Intent(this, WebCallCalleeActivity.class);
+		PendingIntent pendingIntent =
+			PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
+
+		//Log.d(TAG,"buildServiceNotification msg="+msg+" chl="+notifChannel+" !="+important);
+		NotificationCompat.Builder notificationBuilder =
+			new NotificationCompat.Builder(this, notifChannel)
+					.setContentTitle(msg) // 1st line
+					.setPriority(prio) // on O+ setPriority is ignored in favor of notifChannel
+					.setOngoing(true)
+					//.setContentText(msg) // 2nd line
+					.setSmallIcon(R.mipmap.notification_icon)
+					.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+					.setContentIntent(pendingIntent);
+		return notificationBuilder.build();
+	}
+
 	private void callInProgressNotification(String message) {
 		if(context==null) {
 			Log.e(TAG,"# callInProgressNotification no context");
@@ -5076,32 +5112,30 @@ public class WebCallService extends Service {
 		Log.d(TAG,"callInProgressNotif title="+title+" dispMsg="+dispMsg);
 
 		NotificationCompat.Builder notificationBuilder =
-			new NotificationCompat.Builder(this, NOTIF_LOW)
-				.setContentTitle(title) // 1st line
-				.setPriority(NotificationCompat.PRIORITY_LOW) // on O+ setPriority is ignored in favor of notifChannel
-				.setOngoing(true)
+			new NotificationCompat.Builder(context, NOTIF_LOW)
 				.setSmallIcon(R.mipmap.notification_icon)
-				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+				.setContentTitle(title) // 1st line
+				.setOngoing(true)
 				.setCategory(NotificationCompat.CATEGORY_CALL)
+				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+				.setPriority(NotificationCompat.PRIORITY_LOW) // on O+ setPriority is ignored in favor of notifChannel
 
 				.addAction(R.mipmap.notification_icon, "Hangup",
-					PendingIntent.getBroadcast(context, 2, hangupIntent,
+					PendingIntent.getBroadcast(context, 1, hangupIntent,
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
 
 				.addAction(R.mipmap.notification_icon, muteButtonLabel,
-					PendingIntent.getBroadcast(context, 3, muteIntent,
+					PendingIntent.getBroadcast(context, 2, muteIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+				.setContentIntent(
+					PendingIntent.getActivity(context, 0, switchToIntent,
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
 //				.setFullScreenIntent(
-//					PendingIntent.getActivity(context, 1, switchToPendingIntent,
+//					PendingIntent.getActivity(context, 0, switchToIntent,
 //						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
-				.setContentIntent(
-					PendingIntent.getActivity(this, 0, switchToIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
 
 				.setContentText(dispMsg); // 2nd line
-
 /*
-
 		NotificationCompat.Builder notificationBuilder =
 //			new NotificationCompat.Builder(context, NOTIF_LOW)
 			new NotificationCompat.Builder(this, NOTIF_LOW)
@@ -5141,24 +5175,102 @@ public class WebCallService extends Service {
 		//Log.d(TAG,"callInProgressNotification: Android10+ notification sent");
 	}
 
-	private Notification buildServiceNotification(String msg, String notifChannel, int prio) {
-		// only call with Build.VERSION.SDK_INT >= Build.VERSION_CODES.O // >= 26
-		Intent notificationIntent = new Intent(this, WebCallCalleeActivity.class);
-		PendingIntent pendingIntent =
-			PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
+	private void incomingCall(String callerID, String callerName, String txtMsg, boolean waitingCaller) {
+		String contentText = callerName+" "+callerID;
+		if(textmode.equals("true")) { // set by signalingCommand()
+			contentText += " TextMode ";
+		}
+		if(txtMsg!="") {
+			contentText += " \""+txtMsg+"\""; // greeting msg
+		}
 
-		//Log.d(TAG,"buildServiceNotification msg="+msg+" chl="+notifChannel+" !="+important);
+		incomingCall = true;
+		rtcConnectFlag = false;
+
+		// activity is NOT visible
+		Date wakeDate = new Date();
+		//Log.d(TAG,"incomingCall: "+
+		//	new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(wakeDate));
+		Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification");
+
+		long eventMS = wakeDate.getTime();
+
+		Intent acceptIntent = new Intent(context, WebCallCalleeActivity.class);
+		acceptIntent.putExtra("wakeup", "pickup");
+		acceptIntent.putExtra("date", eventMS);
+
+		Intent switchToIntent =	new Intent(context, WebCallCalleeActivity.class);
+		switchToIntent.putExtra("wakeup", "call");
+		switchToIntent.putExtra("date", eventMS);
+
+		Intent denyIntent = new Intent("serviceCmdReceiver");
+		denyIntent.putExtra("denyCall", "true");
+		if(waitingCaller) {
+			denyIntent.putExtra("denyID", callerID);
+		}
+
+		Intent dummyIntent = new Intent("serviceCmdReceiver");
+		denyIntent.putExtra("dummy", "true");
+
 		NotificationCompat.Builder notificationBuilder =
-			new NotificationCompat.Builder(this, notifChannel)
-					.setContentTitle(msg) // 1st line
-					.setPriority(prio) // on O+ setPriority is ignored in favor of notifChannel
-					.setOngoing(true)
-					//.setContentText(msg) // 2nd line
-					.setSmallIcon(R.mipmap.notification_icon)
-					.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-					.setContentIntent(pendingIntent);
-		return notificationBuilder.build();
+			new NotificationCompat.Builder(context, NOTIF_HIGH)
+				.setSmallIcon(R.mipmap.notification_icon)
+				.setContentTitle("WebCall incoming")
+				.setOngoing(true)
+				.setCategory(NotificationCompat.CATEGORY_CALL)
+				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+				//.setLights(0xff00ff00, 300, 100)	// does not seem to work on N7
+
+				// on O+ setPriority is ignored in favor of notifChannel NOTIF_HIGH / NOTIF_ID2
+				.setPriority(NotificationCompat.PRIORITY_HIGH)
+
+				.addAction(R.mipmap.notification_icon,"Accept",
+					PendingIntent.getActivity(context, 1, acceptIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.addAction(R.mipmap.notification_icon,"Switch",
+					PendingIntent.getActivity(context, 2, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				.addAction(R.mipmap.notification_icon,"Reject",
+					PendingIntent.getBroadcast(context, 3, denyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+
+				//.setAutoCancel(true) // any click will close the notification
+				// if this is false, any click will switchTo activity
+
+				// we are using our own ringtone (see startRinging())
+				//.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+
+				// clicking on the area behind the action buttons will (also) switchTo activty
+				// replace this with dummdummyIntent: because it is invoked automatically when the device is in sleep mode
+				//	PendingIntent.getActivity(context, 1, switchToIntent,
+				.setContentIntent( // will show the notification and only launch the intent if user clicks
+					PendingIntent.getActivity(context, 0, switchToIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
+				.setFullScreenIntent( // will launch the intent, aka start the activity, without the user doing anything
+					PendingIntent.getActivity(context, 0, switchToIntent,
+//					PendingIntent.getActivity(context, 0, dummyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
+
+				.setContentText(contentText);
+
+		Notification notification = notificationBuilder.build();
+		notificationManager.notify(NOTIF_ID2, notification);
+		//Log.d(TAG,"incomingCall: '"+contentText+"' Android10+ notification sent");
+
+		// send log RING to server
+		String ringMsg = "log|callee Incoming /";
+		// do this later when all deployed server can cope without 3rd arg
+		//String ringMsg = "log|callee Incoming";
+		Log.d(TAG,"wsClient.send RING-log "+ringMsg);
+		try {
+			wsClient.send(ringMsg);
+		} catch(Exception ex) {
+			Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
+		}
 	}
+
 
 	private void exitService() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
@@ -5269,15 +5381,28 @@ public class WebCallService extends Service {
 
 		if(newNetworkInt<=0 && oldNetworkInt>0) {
 			// lost network
-			if(oldNetworkInt==2) {
-				Log.d(TAG,"networkChange lost Wifi");
-				statusMessage("Wifi network lost",-1,true);
-			} else if(oldNetworkInt==1) {
-				Log.d(TAG,"networkChange lost mobile");
-				statusMessage("Mobile network lost",-1,true);
+			if(connectToServerIsWanted) {
+				if(oldNetworkInt==2) {
+					Log.d(TAG,"networkChange lost Wifi");
+					statusMessage("Wifi network lost, reconnector active",-1,true);
+				} else if(oldNetworkInt==1) {
+					Log.d(TAG,"networkChange lost mobile");
+					statusMessage("Mobile network lost, reconnector active",-1,true);
+				} else {
+					Log.d(TAG,"networkChange lost "+haveNetworkInt);
+					statusMessage("Network lost, reconnector active",-1,true);
+				}
 			} else {
-				Log.d(TAG,"networkChange lost "+haveNetworkInt);
-				statusMessage("Network lost",-1,true);
+				if(oldNetworkInt==2) {
+					Log.d(TAG,"networkChange lost Wifi");
+					statusMessage("Wifi network lost, reconnector off",-1,true);
+				} else if(oldNetworkInt==1) {
+					Log.d(TAG,"networkChange lost mobile");
+					statusMessage("Mobile network lost, reconnector off",-1,true);
+				} else {
+					Log.d(TAG,"networkChange lost "+haveNetworkInt);
+					statusMessage("Network lost, reconnector off",-1,true);
+				}
 			}
 		} else {
 			// gained network
@@ -5320,10 +5445,7 @@ public class WebCallService extends Service {
 					}
 				} else if(newNetworkInt==1) {
 					statusMessage("Reconnecting via Mobile...",-1,true);
-				} else if(newNetworkInt>0) {
-					statusMessage("Reconnecting...",-1,true);
 				} else {
-					// this would overwrite the 'network lost' msg
 					statusMessage("Reconnecting...",-1,true);
 				}
 
@@ -5411,6 +5533,22 @@ public class WebCallService extends Service {
 			Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY |
 			Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
 		context.startActivity(webcallToFrontIntent);
+	}
+
+	private void cancelIncomingCall() {
+		Log.d(TAG,"cancelIncomingCall endPeerCon()");
+		// clear queueWebRtcMessage / stringMessageQueue
+		while(!stringMessageQueue.isEmpty()) {
+			stringMessageQueue.poll();
+		}
+		endPeerCon();
+		if(wsClient!=null && connectToServerIsWanted) {
+			Log.d(TAG,"cancelIncomingCall send init...");
+			wsClient.send("init|");
+			// wait for sessionID
+		} else {
+			statusMessage(offlineMessage,-1,true);
+		}
 	}
 
 	private void postDozeAction() {
