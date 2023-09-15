@@ -1,2 +1,1 @@
-Web-Telephony No-SIM P2P E2E-Encryption
-
+WebCall P2P E2EE Telephony
