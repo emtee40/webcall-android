@@ -2,9 +2,10 @@ WebCall for Android 1.4.8
 with WebCall Server 4.0
 - User-Defined Custom IDs
 - New Call Screen
-- Notification support for Android 7.0-13.0
-- Hangup and Mute from the Notification
 - New Quick Setting Tile
+- P2P TextChat + File Transfer
+- Notification support for Android 7.0-13.0
+- Hangup and Mute directly from Notification
 - Much improved User Interface
 - Server can be disconnected while in call
 - Ultra Low Power Consumption

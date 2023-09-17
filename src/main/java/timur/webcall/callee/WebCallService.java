@@ -71,6 +71,7 @@ import android.webkit.PermissionRequest;
 import android.webkit.CookieManager;
 import android.webkit.CookieSyncManager;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebResourceError;
 import android.webkit.ValueCallback;
 import android.webkit.DownloadListener;
@@ -134,7 +135,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URISyntaxException;
-import java.net.HttpURLConnection;
+//import java.net.HttpURLConnection;
 import java.nio.ByteBuffer;
 import java.io.File;
 import java.io.BufferedReader;
@@ -331,6 +332,7 @@ public class WebCallService extends Service {
 	private static volatile BroadcastReceiver serviceCmdReceiver = null;
 	private static volatile boolean incomingCall = false;
 	private static volatile boolean activityVisible = false;
+	private static volatile boolean activityTerminated = true;	// TODO maybe it is (on start by tile)
 	private static volatile boolean autoPickup = false;
 	private static volatile MediaPlayer ringPlayer = null;
 	private static volatile boolean calleeIsReady = false;
@@ -354,9 +356,9 @@ public class WebCallService extends Service {
 	public IBinder onBind(Intent intent) {
 		context = this;
 		prefs = PreferenceManager.getDefaultSharedPreferences(context);
+		stopSelfFlag = false;
 		Binder mBinder = new WebCallServiceBinder();
 		boundServiceClients++;
-		stopSelfFlag = false;
 		Log.d(TAG,"onBind "+boundServiceClients+" "+intent.toString());
 		return mBinder;
 	}
@@ -365,14 +367,15 @@ public class WebCallService extends Service {
 	public boolean onUnbind(Intent intent) {
 		boundServiceClients--;
 		Log.d(TAG, "onUnbind "+boundServiceClients+" "+intent.toString());
-		if(boundServiceClients<1) {
-			if(connectToServerIsWanted) {
-				Log.d(TAG, "onUnbind connectToServerIsWanted: no exitService() connected="+(wsClient!=null));
-			} else {
-				Log.d(TAG, "! onUnbind: exitService() not called, connected="+(wsClient!=null));
-				// not call exitService() because: "startForegroundService() did not then call Service.startForeground()"
-				//exitService();
-			}
+		if(boundServiceClients>0) {
+			return true; // true: call onRebind(Intent) later when new clients bind
+		}
+		activityTerminated = true;
+		if(wsClient==null && !connectToServerIsWanted && !peerConnectFlag && !callPickedUpFlag) {
+			Log.d(TAG, "onUnbind: not connected, serverNotWanted -> exitService() ");
+			exitService();
+		} else {
+			Log.d(TAG, "onUnbind no exitService() connected="+(wsClient!=null));
 		}
 		return true; // true: call onRebind(Intent) later when new clients bind
 	}
@@ -458,8 +461,13 @@ public class WebCallService extends Service {
 		super.onTaskRemoved(rootIntent);
 		Log.d(TAG, "onTaskRemoved "+rootIntent.toString()+" connected="+(wsClient!=null));
 		closeWebView("onTaskRemoved");
-		activityVisible=false;
+		activityVisible = false;
+		activityTerminated = true;
 		System.gc();
+		if(wsClient==null && !connectToServerIsWanted && activityTerminated && !peerConnectFlag && !callPickedUpFlag) {
+			Log.d(TAG,"JS onTaskRemoved(), wsClient==null + serverNotWanted + activityKilled -> exitService()");
+			exitService();
+		}
 		Log.d(TAG, "onTaskRemoved done connected="+(wsClient!=null));
 	}
 
@@ -503,6 +511,7 @@ public class WebCallService extends Service {
 					if(message.equals("true")) {
 						if(!activityVisible) {
 							activityVisible = true;
+							activityTerminated = false;
 							Log.d(TAG, "serviceCmdReceiver activityVisible true connected="+(wsClient!=null));
 							if(dozeIdleCounter>0) {
 								postDozeAction();
@@ -654,17 +663,46 @@ public class WebCallService extends Service {
 			}
 		};
 		registerReceiver(serviceCmdReceiver, new IntentFilter("serviceCmdReceiver"));
-		serviceAlive = true;
 		Log.d(TAG,"onCreate done connected="+(wsClient!=null));
 	}
 
 	@Override
 	public int onStartCommand(Intent onStartIntent, int flags, int startId) {
-		Log.d(TAG,"onStartCommand loginUrl="+loginUrl+" connected="+(wsClient!=null));
+		Log.d(TAG,"onStartCommand loginUrl="+loginUrl+" connected="+(wsClient!=null)+" activityTerm="+activityTerminated);
 		context = this;
 
+		if(prefs==null) {
+			prefs = PreferenceManager.getDefaultSharedPreferences(context);
+		}
+
+		boolean autoCalleeConnect = false;
+		try {
+			boolean connectWanted = prefs.getBoolean("connectWanted", false);
+				//Log.d(TAG,"onStartCommand connectWanted force false");
+				// connectWanted = false
+			//Log.d(TAG,"onStartCommand connectWanted="+connectWanted);
+			autoCalleeConnect = connectWanted;
+		} catch(Exception ex) {
+			Log.d(TAG,"onStartCommand connectWanted=? ex="+ex);
+		}
+		Log.d(TAG,"----- onStartCommand autoCalleeConnect="+autoCalleeConnect+" onStartIntent="+onStartIntent);
+
+		if(onStartIntent==null && autoCalleeConnect==false) {
+			Log.d(TAG,"onStartCommand onStartIntent==null autoCalleeConnect==false removeNotification");
+			// service restart after crash but autoCalleeConnect not needed
+
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+				// create notificationChannel to start service in foreground
+				String msg = "exiting";
+				Log.d(TAG,"onStartCommand startForeground: "+msg);
+				startForeground(NOTIF_ID1,buildServiceNotification(msg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW));
+			}
+			exitService();
+			return START_NOT_STICKY;
+		}
+
 		if(connectivityManager==null) {
-			Log.d(TAG,"onStartCommand connectivityManager==null");
+			Log.d(TAG,"onStartCommand connectivityManager init...");
 			connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
 		} else {
 			Log.d(TAG,"onStartCommand connectivityManager!=null");
@@ -675,7 +713,7 @@ public class WebCallService extends Service {
 		}
 
 		if(notificationManager==null) {
-			Log.d(TAG,"onStartCommand notificationManager==null");
+			Log.d(TAG,"onStartCommand notificationManager init...");
 			notificationManager = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
 		} else {
 			Log.d(TAG,"onStartCommand notificationManager!=null");
@@ -689,22 +727,6 @@ public class WebCallService extends Service {
 		int oldHaveNetworkInt = haveNetworkInt;
 		checkNetworkState(false); // will set haveNetworkInt
 		Log.d(TAG,"onStartCommand haveNetworkInt="+haveNetworkInt+" (old="+oldHaveNetworkInt+")");
-
-		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-			// create notificationChannel to start service in foreground
-			String msg = offlineMessage;
-			if(wsClient!=null) {
-				msg = readyToReceiveCallsString;
-				if(callPickedUpFlag || peerConnectFlag) {
-					msg = connectedToServerString;
-				} else if(ringFlag) {
-					msg = "Incoming call...";
-				}
-			}
-			Log.d(TAG,"onStartCommand startForeground: "+msg);
-			startForeground(NOTIF_ID1,buildServiceNotification(msg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW));
-			statusMessage(msg,-1,true);
-		}
 
 		if(batteryStatusfilter==null) {
 			batteryStatusfilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
@@ -815,9 +837,25 @@ public class WebCallService extends Service {
 			return 0;
 		}
 
-		if(prefs==null) {
-			prefs = PreferenceManager.getDefaultSharedPreferences(context);
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
+			// create notificationChannel to start service in foreground
+			String msg = offlineMessage;
+			if(wsClient!=null) {
+				msg = readyToReceiveCallsString;
+				if(callPickedUpFlag || peerConnectFlag) {
+					msg = connectedToServerString;
+				} else if(ringFlag) {
+					msg = "Incoming call...";
+				}
+			}
+			Log.d(TAG,"onStartCommand startForeground: "+msg);
+			startForeground(NOTIF_ID1,buildServiceNotification(msg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW));
+			statusMessage(msg,-1,true);
 		}
+
+		// we now consider the service alive
+		serviceAlive = true;
+
 		try {
 			audioToSpeakerMode = prefs.getInt("audioToSpeaker", 0);
 			Log.d(TAG,"onStartCommand audioToSpeakerMode="+audioToSpeakerMode);
@@ -1121,7 +1159,7 @@ public class WebCallService extends Service {
 		}
 
 		if(wsClient!=null) {
-			Log.d(TAG,"! onStartCommand got existing wsClient ");
+			Log.d(TAG,"! onStartCommand got wsClient");
 			// probably activity was discarded, got restarted, and now we see service is still connected
 			//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else if(reconnectBusy) {
@@ -1129,6 +1167,7 @@ public class WebCallService extends Service {
 			// TODO not sure about this
 			//storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 		} else {
+			Log.d(TAG,"onStartCommand !wsClient !reconnectBusy activityTerminated="+activityTerminated);
 			String webcalldomain = null;
 			String username = null;
 			try {
@@ -1153,22 +1192,12 @@ public class WebCallService extends Service {
 			} else {
 				setLoginUrl();
 				Log.d(TAG,"onStartCommand loginUrl="+loginUrl);
-				boolean autoCalleeConnect = false;
 				int autoCalleeStartDelay = 16; // seconds, default value for start from boot
 				if(onStartIntent==null) {
 					Log.d(TAG,"onStartCommand onStartIntent==null");
 					// service restart after crash
 					// autoCalleeConnect to webcall server if extraCommand.equals("connect")
 					autoCalleeStartDelay = 3; // seconds, value for start from tile
-					try {
-						boolean connectWanted = prefs.getBoolean("connectWanted", false);
-							//Log.d(TAG,"onStartCommand connectWanted force false");
-							// connectWanted = false
-						Log.d(TAG,"onStartCommand connectWanted="+connectWanted);
-						autoCalleeConnect = connectWanted;
-					} catch(Exception ex) {
-						Log.d(TAG,"onStartCommand connectWanted ex="+ex);
-					}
 				} else {
 					Log.d(TAG,"onStartCommand onStartIntent!=null "+onStartIntent.toString());
 					// let's see if service was started by boot...
@@ -1177,20 +1206,18 @@ public class WebCallService extends Service {
 						// started from tile
 						Log.d(TAG,"onStartCommand extras==null");
 						autoCalleeStartDelay = 1; // seconds, value for start from tile
-							/*
-							try {
-								boolean connectWanted = prefs.getBoolean("connectWanted", false);
-									//Log.d(TAG,"onStartCommand connectWanted force false");
-									// connectWanted = false
-								Log.d(TAG,"onStartCommand connectWanted="+connectWanted);
-								autoCalleeConnect = connectWanted;
-							} catch(Exception ex) {
-								Log.d(TAG,"onStartCommand connectWanted ex="+ex);
-							}
-							*/
+						try {
+							boolean connectWanted = prefs.getBoolean("connectWanted", false);
+								//Log.d(TAG,"onStartCommand connectWanted force false");
+								// connectWanted = false
+							Log.d(TAG,"onStartCommand connectWanted="+connectWanted);
+							autoCalleeConnect = connectWanted;
+						} catch(Exception ex) {
+							Log.d(TAG,"onStartCommand connectWanted ex="+ex);
+						}
 						// if started from tile, we go directly into connect mode
 						// independent of pref "connectWanted"
-						autoCalleeConnect = true;
+						//autoCalleeConnect = true;
 					} else {
 						String extraCommand = extras.getString("onstart");
 						if(extraCommand==null) {
@@ -1248,6 +1275,7 @@ public class WebCallService extends Service {
 	@SuppressLint("SetJavaScriptEnabled")
 	class WebCallServiceBinder extends Binder {
 		public void startWebView(View view) {
+			activityTerminated = false;
 			String username = prefs.getString("username", "");
 			Log.d(TAG, "startWebView creating myWebView for user="+username);
 
@@ -1368,7 +1396,7 @@ public class WebCallService extends Service {
 					// Issued by: O=Internet Widgits Pty Ltd,ST=Some-State,C=AU;
 					//  on URL: https://192.168.3.209:8068/callee/Timur?auto=1
 
-					// TODO do only proceed if confirmed by the user
+					// do only proceed if confirmed by the user
 					// however, if we do proceed here, wsOpen -> connectHost(wss://...) will fail
 					//   with onError ex javax.net.ssl.SSLHandshakeException
 					if(insecureTlsFlag) {
@@ -1392,16 +1420,16 @@ public class WebCallService extends Service {
 				@Override
 				public boolean shouldOverrideUrlLoading(WebView view, String url) {
 					final Uri uri = Uri.parse(url);
-					Log.d(TAG, "shouldOverrideUrl "+url);
-					return handleUri(uri);
+					Log.d(TAG, "! shouldOverrideUrl "+url);
+					return false; //handleUri(uri);
 				}
 
-				//@TargetApi(Build.VERSION_CODES.N)
+				@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 				@Override
 				public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
 					final Uri uri = request.getUrl();
 					boolean override = handleUri(uri);
-					Log.d(TAG, "shouldOverrideUrlL="+uri+" override="+override);
+					Log.d(TAG, "! shouldOverrideUrlL="+uri+" override="+override);
 					return override;
 				}
 
@@ -1456,6 +1484,107 @@ public class WebCallService extends Service {
 						}
 					}
 					return false; // continue to load this url
+				}
+
+				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
+				@Override
+				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+					final Uri uri = request.getUrl();
+					//Log.i(TAG, "handleUri " + uri);
+					//final String host = uri.getHost();
+					//final String scheme = uri.getScheme();
+					final String path = uri.getPath();
+					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0) {
+						return null;
+					}
+
+					Log.d(TAG, "intercept "+uri.toString());
+					try {
+						URL url = new URL(uri.toString());
+
+						if(insecureTlsFlag) {
+							//Log.d(TAG,"intercept allow insecure https");
+							try {
+								TrustManager[] trustAllCerts = new TrustManager[] {
+									new X509TrustManager() {
+										public X509Certificate[] getAcceptedIssuers() {
+											X509Certificate[] myTrustedAnchors = new X509Certificate[0];
+											return myTrustedAnchors;
+										}
+										@Override
+										public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+
+										@Override
+										public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+									}
+								};
+								SSLContext sslContext = SSLContext.getInstance("TLS");
+								sslContext.init(null, trustAllCerts, new SecureRandom());
+								SSLSocketFactory factory = sslContext.getSocketFactory();
+								HttpsURLConnection.setDefaultSSLSocketFactory(factory);
+							} catch(Exception ex) {
+								Log.w(TAG,"# intercept allow insecure https ex="+ex);
+							}
+						}
+
+						//Log.d(TAG,"intercept openCon("+url+")");
+						HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
+						con.setConnectTimeout(22000);
+						con.setReadTimeout(10000);
+						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
+						con.setRequestProperty("X-WvVer", getWebviewVersion());
+						
+						if(insecureTlsFlag) {
+							// avoid: "javax.net.ssl.SSLPeerUnverifiedException: Hostname 192.168.0.161 not verified"
+							// on reconnect on LineageOS
+							con.setHostnameVerifier(new HostnameVerifier() {
+								@Override
+								public boolean verify(String hostname, SSLSession session) {
+									//HostnameVerifier hv = new org.apache.http.conn.ssl.StrictHostnameVerifier();
+									//boolean ret = hv.verify("192.168.0.161", session);
+									//Log.d(TAG,"intercept HostnameVerifier accept "+hostname);
+									return true;
+								}
+							});
+						}
+
+						if(myWebView!=null) {
+							// avoid Mulch webview crash
+							CookieManager.getInstance().setAcceptCookie(true);
+							if(webviewCookies==null) {
+								webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
+							}
+						}
+						if(webviewCookies!=null) {
+							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)");
+							con.setRequestProperty("Cookie", webviewCookies);
+							storePrefsString("cookies", webviewCookies);
+						} else {
+							String newWebviewCookies = prefs.getString("cookies", "");
+							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)");
+							con.setRequestProperty("Cookie", newWebviewCookies);
+						}
+
+						//Log.d(TAG,"intercept con.connect()");
+						con.connect();
+						int status = con.getResponseCode();
+						if(status!=200) {
+							Log.d(TAG,"# intercept http login statusCode="+status+" fail");
+						} else {
+							//Map<String,List<String>> headers = con.getHeaderFields();
+							String mime = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
+							String encoding = con.getHeaderField("content-encoding"); // null
+							int idxSemicolon = mime.indexOf(";");
+							if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+							if(encoding==null) encoding="utf-8";
+							//Log.d(TAG,"intercept 200 ("+ mime+ ") ("+ encoding+")");
+							return new WebResourceResponse(mime, encoding, con.getInputStream());
+						}
+					} catch(Exception ex) {
+						Log.d(TAG, "# intercept "+uri+" Exception="+ex);
+					}
+					//return null to tell WebView we failed to fetch it WebView should try again.
+					return null;
 				}
 
 				@Override
@@ -1640,18 +1769,16 @@ public class WebCallService extends Service {
 					currentUrl = "https://"+webcalldomain+"/callee/"+username;
 				}
 			}
-			Log.d(TAG, "startWebView load currentUrl="+currentUrl);
+			Log.d(TAG, "startWebView load webviewVers="+getWebviewVersion()+" url="+currentUrl);
 			myWebView.loadUrl(currentUrl);
-
-			Log.d(TAG, "startWebView version "+getWebviewVersion());
 		}
 
 		public boolean connectToServerIsWanted() {
 			return connectToServerIsWanted;
 		}
 
-		// webcallConnectType returns >0 if we are connected to webcall server signalling
 		public int webcallConnectType() {
+			// webcallConnectType returns >0 if we are connected to webcall server signalling
 			if(reconnectBusy) {
 	  			// while service is in the process of reconnecting, webcallConnectType() will return 3
 				// this will prevent the activity to destroy itself and open the base-page on restart
@@ -1734,20 +1861,12 @@ public class WebCallService extends Service {
 		public void activityDestroyed() {
 			// activity is telling us that it is being destroyed
 			// TODO this should set webviewPageLoaded=false, needed for next incoming call ???
-			closeWebView("activityDestroyed");
 			activityVisible = false;
-			if(connectToServerIsWanted) {
-				Log.d(TAG, "activityDestroyed got connectToServerIsWanted - do nothing");
-				// do nothing
-			} else if(reconnectBusy) {
-				Log.d(TAG, "activityDestroyed got reconnectBusy - do nothing");
-				// do nothing
-			} else {
-				//Log.d(TAG, "activityDestroyed exitService() ------------------- ");
-				// hangup peercon, reset webview, clear callPickedUpFlag
-				//exitService();
-
-				Log.d(TAG, "activityDestroyed do nothing (no exitService)");
+			activityTerminated = true;
+			closeWebView("activityDestroyed");
+			if(wsClient==null && !connectToServerIsWanted && !peerConnectFlag && !callPickedUpFlag) {
+				Log.d(TAG, "----- activityDestroyed exitService()");
+				exitService();
 			}
 		}
 
@@ -1891,7 +2010,7 @@ public class WebCallService extends Service {
 			if(wsClient==null) {
 				Log.d(TAG, "! goOffline() already offline");
 				// may need to remove a msg like "No network. Waiting in standby..."
-				removeNotification();
+				exitService();
 				// must also remove status msg and switch buttons (enable goOnline)
 			} else
 
@@ -2015,9 +2134,10 @@ public class WebCallService extends Service {
 			// this is used for ringOnSpeakerOn
 			audioToSpeakerSet(audioToSpeakerMode>0,false);
 
-			if(wsClient==null && connectToServerIsWanted==false) {
-				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> removeNotification()");
-				removeNotification();
+			if(wsClient==null && !connectToServerIsWanted && activityTerminated &&
+					!peerConnectFlag && !callPickedUpFlag) {
+				Log.d(TAG,"JS peerDisConnect(), wsClient==null and serverIsNotWanted -> exitService()");
+				exitService();
 			}
 		}
 
@@ -2624,9 +2744,10 @@ public class WebCallService extends Service {
 
 		@Override
 		public void onClose(int code, String reason, boolean remote) {
+			// code 1000: indicates a normal closure (when we goOffline, or server forced disconnect)
+			// code 1001: (manual reload FF)
 			// code 1002: an endpoint is terminating the connection due to a protocol error
 			// code 1006: connection was closed abnormally (locally)
-			// code 1000: indicates a normal closure (when we click goOffline, or server forced disconnect)
 			postStatus("state", "disconnected");
 
 			autoPickup = false;
@@ -2662,7 +2783,7 @@ public class WebCallService extends Service {
 					// connection to webcall server has been interrupted and must be reconnected asap
 					// normally this happens "all of a sudden"
 					// but on N9 I have seen this happen on server restart
-					// problem can ne, that we are right now in doze mode (deep sleep)
+					// problem can be, that we are right now in doze mode (deep sleep)
 					// in deep sleep we cannot create new network connections
 					// in order to establish a new network connection, we need to bring device out of doze
 
@@ -3286,8 +3407,8 @@ public class WebCallService extends Service {
 			return;
 		}
 
-		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName+
-					"&ver="+ BuildConfig.VERSION_NAME+"_"+getWebviewVersion(); // +"&re=true";
+		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName;
+//					"&ver="+ BuildConfig.VERSION_NAME+"_"+getWebviewVersion(); // +"&re=true";
 		//Log.d(TAG,"setLoginUrl="+loginUrl);
 	}
 
@@ -3726,6 +3847,8 @@ public class WebCallService extends Service {
 					HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
 					con.setConnectTimeout(22000);
 					con.setReadTimeout(10000);
+					con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
+					con.setRequestProperty("X-WvVer", getWebviewVersion());
 
 					if(insecureTlsFlag) {
 						// avoid: "javax.net.ssl.SSLPeerUnverifiedException: Hostname 192.168.0.161 not verified"
@@ -3761,8 +3884,6 @@ public class WebCallService extends Service {
 						//}
 						con.setRequestProperty("Cookie", newWebviewCookies);
 					}
-					con.setRequestProperty("Connection", "close"); // this kills keep-alives TODO???
-					BufferedReader reader = null;
 					if(!reconnectBusy) {
 						Log.d(TAG,"reconnecter abort");
 						if(reconnectSchedFuture!=null && !reconnectSchedFuture.isDone()) {
@@ -3784,6 +3905,8 @@ public class WebCallService extends Service {
 						reconnectBusy = false;
 						return;
 					}
+					con.setRequestProperty("Connection", "close"); // this kills keep-alives TODO???
+					BufferedReader reader = null;
 					String exString = "";
 					int status = 0;
 					try {
@@ -4606,22 +4729,24 @@ public class WebCallService extends Service {
 //      powerConnectionReceiver dozeStateReceiver myNetworkCallback
 
 		if(skipStopForeground) {
-			Log.d(TAG,"disconnectHost with skipStopForeground, removeNotification() not wanted");
+			Log.d(TAG,"disconnectHost with skipStopForeground, exitService() not wanted");
 		} else {
 			connectToServerIsWanted = false;
 			storePrefsBoolean("connectWanted",false); // used in case of service crash + restart
 			postStatus("state", "deactivated");
 
-			if(callPickedUpFlag || peerConnectFlag) {
+			if(!activityTerminated) {
+				Log.d(TAG,"disconnectHost no skipStopForeground, but !activityTerminated");
+			} else if(callPickedUpFlag || peerConnectFlag) {
 				Log.d(TAG,"disconnectHost no skipStopForeground, but callInProgress");
 			} else {
-				Log.d(TAG,"disconnectHost -> removeNotification()");
+				Log.d(TAG,"disconnectHost -> exitService()");
 				// remove the Android notification
 				// we delay this so that the last notification msg (offlineMessage) is still shown
 				scheduler.schedule(new Runnable() {
 					public void run() {
-						// no more notification msgs afte this
-						removeNotification();
+						// no more notification msgs after this
+						exitService();
 						Log.d(TAG,"disconnectHost delayed done");
 					}
 				}, 200l, TimeUnit.MILLISECONDS);
@@ -4629,15 +4754,21 @@ public class WebCallService extends Service {
 		}
 	}
 
-	private void removeNotification() {
+	private void exitService() {
 		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-			Log.d(TAG,"removeNotification delayed stopForeground()");
+			Log.d(TAG,"exitService stopForeground()");
 			stopForeground(true); // true = removeNotification
 		}
-
 		// without .cancel(NOTIF_ID1) our notification icon will not go away
-		Log.d(TAG,"removeNotification notificationManager.cancel(NOTIF_ID1)");
+		Log.d(TAG,"exitService notificationManager.cancel(NOTIF_ID1)");
 		notificationManager.cancel(NOTIF_ID1);
+
+		// service kill itself
+		Log.d(TAG, "exitService stopSelf()");
+		onDestroy();
+		stopSelfFlag = true;
+		// stopSelf must not be called without a preceeding startForeground
+		stopSelf();
 	}
 
 	private void endPeerCon() {
@@ -5194,22 +5325,6 @@ public class WebCallService extends Service {
 		} catch(Exception ex) {
 			Log.d(TAG,"# wsClient.send "+ringMsg+" ex="+ex.toString());
 		}
-	}
-
-
-	private void exitService() {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // >= 26
-			// remove the forground-notification
-			Log.d(TAG,"exitService stopForeground()");
-			stopForeground(true); // true = removeNotification
-		}
-
-		// kill the service itself
-		Log.d(TAG, "exitService stopSelf()");
-		onDestroy();
-		stopSelfFlag = true;
-		// stopSelf must not be called without a preceeding startForeground
-		stopSelf();
 	}
 
 	private void storePrefsString(String key, String value) {
