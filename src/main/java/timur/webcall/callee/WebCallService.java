@@ -338,7 +338,7 @@ public class WebCallService extends Service {
 	private static volatile boolean calleeIsReady = false;
 	private static volatile boolean stopSelfFlag = false;
 	private static volatile boolean ringFlag = false;
-	private static volatile String textmode = "";
+	private static volatile boolean textmode = false;
 	private static volatile String lastStatusMessage = "";
 	private static volatile WebView myWebView = null;
 
@@ -2264,7 +2264,14 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean isRinging() {
+			Log.d(TAG, "JS isRinging() "+ringFlag);
 			return ringFlag; // set by JS ringStart()
+		}
+
+		@android.webkit.JavascriptInterface
+		public boolean isTextmode() {
+			Log.d(TAG, "JS isTextmode() "+textmode);
+			return textmode; // set by JS onMessage()
 		}
 
 		@android.webkit.JavascriptInterface
@@ -2909,13 +2916,14 @@ public class WebCallService extends Service {
 			}
 
 			if(message.startsWith("textmode|")) {
-				textmode = message.substring(9);
-				if(textmode.equals("true")) {
+				if(message.substring(9).equals("true")) {
+					textmode = true;
 					Log.d(TAG,"onMessage textmode=("+textmode+")");
 				} else {
-					textmode="";
+					textmode = false;
 					Log.d(TAG,"onMessage no textmode");
 				}
+				// this runJS may fail (but the client can call isTextmode())
 				String argStr = "wsOnMessage2('"+message+"','service');";
 				runJS(argStr,null);
 				return;
@@ -2972,7 +2980,7 @@ public class WebCallService extends Service {
 				}
 
 				String contentText = callerName+" "+callerID;
-				if(textmode.equals("true")) { // set by signalingCommand()
+				if(textmode) { // set by onMessage()
 					contentText += " TextMode ";
 				}
 				if(txtMsg!="") {
@@ -5233,7 +5241,7 @@ public class WebCallService extends Service {
 
 	private void incomingCall(String callerID, String callerName, String txtMsg, boolean waitingCaller) {
 		String contentText = callerName+" "+callerID;
-		if(textmode.equals("true")) { // set by signalingCommand()
+		if(textmode) { // set by onMessage(()
 			contentText += " TextMode ";
 		}
 		if(txtMsg!="") {
@@ -5306,7 +5314,6 @@ public class WebCallService extends Service {
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE))
 				.setFullScreenIntent( // will launch the intent, aka start the activity, without the user doing anything
 					PendingIntent.getActivity(context, 0, switchToIntent,
-//					PendingIntent.getActivity(context, 0, dummyIntent,
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
 
 				.setContentText(contentText);
