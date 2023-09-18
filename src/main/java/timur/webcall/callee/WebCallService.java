@@ -1299,35 +1299,49 @@ public class WebCallService extends Service {
 		        @Override
 		        public void onDownloadStart(String url, String userAgent,
 						String contentDisposition, String mimetype, long contentLength) {
-					Log.d(TAG,"DownloadListener url="+url+" mime="+mimetype);
+					//Log.d(TAG,"DownloadListener url="+url+" mime="+mimetype);
 					if(url.startsWith("blob:")) {
 						// this is for "downloading" files to disk, that were previously received from peer
 						String fetchBlobJS =
-							"javascript: var xhr=new XMLHttpRequest();" +
-							"xhr.open('GET', '"+url+"', true);" +
-							//"xhr.setRequestHeader('Content-type','application/vnd...;charset=UTF-8');" +
-							"xhr.responseType = 'blob';" +
-							"xhr.onload = function(e) {" +
-							"    if (this.status == 200) {" +
-							"        var blob = this.response;" +
-							"        var reader = new FileReader();" +
-							"        reader.readAsDataURL(blob);" +
-							"        reader.onloadend = function() {" +
-							"            base64data = reader.result;" +
-							"            let aElements =document.querySelectorAll(\"a[href='"+url+"']\");"+
-							"            if(aElements[0]) {" +
-							//"                console.log('aElement='+aElements[0]);" +
-							"                let filename = aElements[0].download;" +
-							"                console.log('filename='+filename);" +
-							"                Android.getBase64FromBlobData(base64data,filename);" +
-							"            }" +
-							"        };" +
-							"    } else {" +
-							"        console.log('this.status not 200='+this.status);" +
-							"    }" +
-							"};" +
-							"xhr.send();";
-						//Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
+		"javascript: var xhr=new XMLHttpRequest();" +
+		"xhr.open('GET', '"+url+"', true);" +
+		//"xhr.setRequestHeader('Content-type','application/vnd...;charset=UTF-8');" +
+		"xhr.responseType = 'blob';" +
+		"xhr.onload = function(e) {" +
+		"  if (this.status == 200) {" +
+		"    console.log('this.status is 200');" +
+		"    var blob = this.response;" +
+		"    console.log('got the blob');" +
+		"    var reader = new FileReader();" +
+		"    console.log('got the reader');" +
+		"    reader.onloadend = function() {" +
+		"      console.log('reader.onloadend called...');" +
+		"      base64data = reader.result;" +
+		"      console.log('have base64data len='+base64data.length);" +
+		"      let aElements = document.querySelectorAll(\"a[href='"+url+"']\");"+
+		"      if(aElements.length<=0) {" +
+		"        aElements = document.getElementById('child').contentDocument.querySelectorAll(\"a[href='"+url+"']\");"+
+		"      }" +
+		"      console.log('have aElements len='+aElements.length);" +
+		"      if(aElements[0]) {" +
+		"        console.log('aElement='+aElements[0]);" +
+		"        let filename = aElements[0].download;" +
+		"        console.log('filename='+filename);" +
+		"        Android.getBase64FromBlobData(base64data,filename);" +
+		"      } else {" +
+		"        console.log('aElements[0] not defiend; document='+document);" +
+		"        Android.getBase64FromBlobData(base64data,'filename.none');" +
+		"      }" +
+		"    };" +
+		"    console.log('reader.onloadend set up');" +
+		"    reader.readAsDataURL(blob);" +
+		"    console.log('done readAsDataURL');" +
+		"  } else {" +
+		"    console.log('this.status not 200='+this.status);" +
+		"  }" +
+		"};" +
+		"xhr.send();";
+						Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
 						myWebView.loadUrl(fetchBlobJS);
 						// file will be stored in getBase64FromBlobData()
 					} else {
