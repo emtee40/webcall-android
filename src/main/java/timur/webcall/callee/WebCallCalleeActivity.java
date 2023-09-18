@@ -2333,7 +2333,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 							"    }" +
 							"};" +
 							"xhr.send();";
-						Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
+						//Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
 						myNewWebView.loadUrl(fetchBlobJS);
 						// file will be stored in getBase64FromBlobData()
 					} else {
@@ -2424,16 +2424,54 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				@SuppressWarnings("deprecation")
 				@Override
 				public boolean shouldOverrideUrlLoading(WebView view, String url) {
-					Log.d(TAG, "_shouldOverrideUrl "+url);
-					return false;
+					final Uri uri = Uri.parse(url);
+					boolean override = handleUri(uri);
+					Log.d(TAG, "! shouldOverrideUrlA "+url+" override="+override);
+					return override;
 				}
 
-				//@TargetApi(Build.VERSION_CODES.N)
+				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 				@Override
 				public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
 					final Uri uri = request.getUrl();
-					Log.d(TAG, "_shouldOverrideUrlL="+uri);
-					return false;
+					boolean override = handleUri(uri);
+					Log.d(TAG, "! shouldOverrideUrlA "+uri+" override="+override);
+					return override;
+				}
+
+				private boolean handleUri(final Uri uri) {
+					//Log.i(TAG, "handleUri " + uri);
+					//final String host = uri.getHost();
+					//final String scheme = uri.getScheme();
+					final String path = uri.getPath();
+					Log.d(TAG, "handleUri path="+path+" scheme="+uri.getScheme());
+
+					if(uri.getScheme().startsWith("file") ||
+							(uri.getScheme().startsWith("http") && path.indexOf("/callee/")>=0) ||
+							(uri.getScheme().startsWith("http") && path.indexOf("/webcall/update")>=0)) {
+						// "file:" and "http*://(anydomain)/callee/*" urls are processed in webview1
+						Log.d(TAG, "switch back to myWebView");
+			            // we want, for instance, /callee/contacts/store/ from a remote-host caller app
+						// to be processed locally in myWebView
+
+						myWebView.setVisibility(View.VISIBLE);
+						myNewWebView.setVisibility(View.INVISIBLE);
+						myNewWebView.loadUrl("about:blank");
+
+						// uri MUST NOT contain apostrophe
+						String encodedUrl = uri.toString().replace("'", "&#39;");
+						String jsStr = "iframeWindowOpen('"+encodedUrl+"',false,'height:95%;max-height:780px;',true);";
+						Log.d(TAG, "runJScode("+jsStr+")");
+						webCallServiceBinder.runJScode(jsStr);
+						return true; // do not load this url into myNewWebView
+					}
+
+					// uri NOT for webview1: ask activity to forward to ext browser (or our intent-filter)
+					Log.i(TAG, "handleUri uri not for myNewWebView; open in external browser ("+uri+")");
+					Intent i = new Intent(Intent.ACTION_VIEW);
+					i.setData(uri);
+					startActivity(i);
+					return true; // do not load this url into myNewWebView
 				}
 
 				@Override

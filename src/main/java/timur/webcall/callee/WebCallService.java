@@ -1341,7 +1341,7 @@ public class WebCallService extends Service {
 		"  }" +
 		"};" +
 		"xhr.send();";
-						Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
+						//Log.d(TAG,"DownloadListener fetchBlobJS="+fetchBlobJS);
 						myWebView.loadUrl(fetchBlobJS);
 						// file will be stored in getBase64FromBlobData()
 					} else {
@@ -1434,8 +1434,9 @@ public class WebCallService extends Service {
 				@Override
 				public boolean shouldOverrideUrlLoading(WebView view, String url) {
 					final Uri uri = Uri.parse(url);
-					Log.d(TAG, "! shouldOverrideUrl "+url);
-					return false; //handleUri(uri);
+					boolean override = handleUri(uri);
+					Log.d(TAG, "! shouldOverrideUrlS "+url+" override="+override);
+					return override;
 				}
 
 				@TargetApi(Build.VERSION_CODES.LOLLIPOP)
@@ -1443,7 +1444,7 @@ public class WebCallService extends Service {
 				public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
 					final Uri uri = request.getUrl();
 					boolean override = handleUri(uri);
-					Log.d(TAG, "! shouldOverrideUrlL="+uri+" override="+override);
+					Log.d(TAG, "! shouldOverrideUrlS "+uri+" override="+override);
 					return override;
 				}
 
@@ -1452,9 +1453,7 @@ public class WebCallService extends Service {
 					//final String host = uri.getHost();
 					//final String scheme = uri.getScheme();
 					final String path = uri.getPath();
-					if(extendedLogsFlag) {
-						Log.d(TAG, "handleUri path="+path+" scheme="+uri.getScheme());
-					}
+					Log.d(TAG, "handleUri path="+path+" scheme="+uri.getScheme());
 
 					if(path.startsWith("/webcall/update") && myWebView!=null && webviewMainPageLoaded) {
 						// load update page into iframe
@@ -1466,12 +1465,12 @@ public class WebCallService extends Service {
 						Log.d(TAG, "runJS("+jsString+")");
 						runJS(jsString,null);
 						return true; // do not load this url into webview
+					}
 
-					} else if(uri.getScheme().startsWith("file") ||
+					if(uri.getScheme().startsWith("file") ||
 						(uri.getScheme().startsWith("http") && path.indexOf("/callee/")>=0)) {
 						// "file:" and "http*://(anydomain)/callee/*" urls are processed in webview1
 						// continue below
-
 					} else {
 						// uri NOT for webview1: ask activity to forward to ext browser (or our intent-filter)
 						Log.i(TAG, "handleUri uri not for webview1; broadcast 'browse' to activity ("+uri+")");
@@ -2213,6 +2212,30 @@ public class WebCallService extends Service {
 				return;
 			}
 		}
+
+		@android.webkit.JavascriptInterface
+		public void getBase64FromBlobData(String base64Data, String filename) throws IOException {
+			// used by WebCallAndroid
+			Log.d(TAG,"JS getBase64FromBlobData "+filename+" "+base64Data.length());
+			int skipHeader = base64Data.indexOf("base64,");
+			if(skipHeader>=0) {
+				base64Data = base64Data.substring(skipHeader+7);
+			}
+			//Log.d(TAG,"JS base64Data="+base64Data);
+			try {
+				// tmtmtm
+				byte[] blobAsBytes = Base64.decode(base64Data,Base64.DEFAULT);
+				Log.d(TAG,"JS bytearray len="+blobAsBytes.length);
+
+				//Log.d(TAG,"JS getBase64FromBlobData data="+base64Data);
+				storeByteArrayToFile(blobAsBytes,filename);
+			} catch(Exception ex) {
+				statusMessage("Error: "+ex.toString(),-1,false,true);
+			} catch(OutOfMemoryError e) {
+				// Error: java.lang.OutOfMemoryError: Failed to allocate a 81338440 byte allocation with 25165824 free bytes and 33MB until OOM, target footprint 190986632, growth limit 201326592
+				statusMessage("Error: "+e.toString(),-1,false,true);
+			}
+		}
 	}
 
 
@@ -2355,8 +2378,6 @@ public class WebCallService extends Service {
 		public void wsClose() {
 			// called by JS:goOffline()
 			Log.d(TAG,"JS wsClose");
-
-//			postStatus("state", "deactivated");
 
 			// wsClient.closeBlocking() + wsClient=null
 			disconnectHost(true,false); // sendNotif skipStopForeground
@@ -2660,30 +2681,6 @@ public class WebCallService extends Service {
 			// used by WebCallAndroid
 			storePrefsLong(pref,val);
 			Log.d(TAG, "JS storePreferenceLong "+pref+" "+val+" stored");
-		}
-
-		@android.webkit.JavascriptInterface
-		public void getBase64FromBlobData(String base64Data, String filename) throws IOException {
-			// used by WebCallAndroid
-			Log.d(TAG,"JS getBase64FromBlobData "+filename+" "+base64Data.length());
-			int skipHeader = base64Data.indexOf("base64,");
-			if(skipHeader>=0) {
-				base64Data = base64Data.substring(skipHeader+7);
-			}
-			//Log.d(TAG,"JS base64Data="+base64Data);
-			try {
-				// tmtmtm
-				byte[] blobAsBytes = Base64.decode(base64Data,Base64.DEFAULT);
-				Log.d(TAG,"JS bytearray len="+blobAsBytes.length);
-
-				//Log.d(TAG,"JS getBase64FromBlobData data="+base64Data);
-				storeByteArrayToFile(blobAsBytes,filename);
-			} catch(Exception ex) {
-				statusMessage("Error: "+ex.toString(),-1,false,true);
-			} catch(OutOfMemoryError e) {
-				// Error: java.lang.OutOfMemoryError: Failed to allocate a 81338440 byte allocation with 25165824 free bytes and 33MB until OOM, target footprint 190986632, growth limit 201326592
-				statusMessage("Error: "+e.toString(),-1,false,true);
-			}
 		}
 
 		@android.webkit.JavascriptInterface
