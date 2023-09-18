@@ -111,7 +111,23 @@ import java.security.cert.X509Certificate;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URI;
-//import java.net.URLEncoder;
+
+import java.security.GeneralSecurityException;
+import java.security.cert.X509Certificate;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocketFactory;
 
 import timur.webcall.callee.BuildConfig;
 
@@ -123,7 +139,6 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 	private static final int FILE_REQ_CODE = 1341;	// onActivityResult
 
 	private WebCallService.WebCallServiceBinder webCallServiceBinder = null;
-//	private volatile boolean boundService = false;
 
 	private WindowManager.LayoutParams mParams;
 	private long lastSetLowBrightness = 0;
@@ -740,8 +755,6 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			if(webCallServiceBinder==null) {
 				Log.d(TAG, "onServiceConnected bind service failed");
 			} else {
-//				boundService = true;
-
 				// tell service that we are visible
 				activityVisible = true;
 				sendBroadcast(new Intent("serviceCmdReceiver").putExtra("activityVisible", "true"));
@@ -783,7 +796,6 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				webCallServiceBinder=null;
 				unbindService(serviceConnection);	// wrong?
 			}
-//			boundService = false;
 		}
 	};
 
@@ -1369,7 +1381,6 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			webCallServiceBinder = null;
 			Log.d(TAG, "onDestroy unbindService");
 			unbindService(serviceConnection);
-//			boundService = false;
 		}
 		if(myNewWebView!=null) {
 			Log.d(TAG, "onDestroy myNewWebView.destroy()");
@@ -2066,7 +2077,6 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			handler.postDelayed(new Runnable() {
 				@Override
 				public void run() {
-//					if(boundService && webCallServiceBinder!=null) {
 					if(webCallServiceBinder!=null) {
 						Log.d(TAG, "activityWake releaseWakeUpWakeLock");
 						webCallServiceBinder.releaseWakeUpWakeLock();
@@ -2473,6 +2483,109 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 					startActivity(i);
 					return true; // do not load this url into myNewWebView
 				}
+
+				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
+				@Override
+				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+					final Uri uri = request.getUrl();
+					//Log.i(TAG, "handleUri " + uri);
+					//final String host = uri.getHost();
+					//final String scheme = uri.getScheme();
+					final String path = uri.getPath();
+					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0) {
+						return null;
+					}
+
+					Log.d(TAG, "intercept "+uri.toString());
+					try {
+						URL url = new URL(uri.toString());
+
+						boolean insecureTlsFlag = webCallServiceBinder.getInsecureTlsFlag();
+						if(insecureTlsFlag) {
+							//Log.d(TAG,"intercept allow insecure https");
+							try {
+								TrustManager[] trustAllCerts = new TrustManager[] {
+									new X509TrustManager() {
+										public X509Certificate[] getAcceptedIssuers() {
+											X509Certificate[] myTrustedAnchors = new X509Certificate[0];
+											return myTrustedAnchors;
+										}
+										@Override
+										public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+
+										@Override
+										public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+									}
+								};
+								SSLContext sslContext = SSLContext.getInstance("TLS");
+								sslContext.init(null, trustAllCerts, new SecureRandom());
+								SSLSocketFactory factory = sslContext.getSocketFactory();
+								HttpsURLConnection.setDefaultSSLSocketFactory(factory);
+							} catch(Exception ex) {
+								Log.w(TAG,"# intercept allow insecure https ex="+ex);
+							}
+						}
+
+						//Log.d(TAG,"intercept openCon("+url+")");
+						HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
+						con.setConnectTimeout(22000);
+						con.setReadTimeout(10000);
+						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
+						//con.setRequestProperty("X-WvVer", webCallServiceBinder.getWebviewVersion());
+
+						if(insecureTlsFlag) {
+							// avoid: "javax.net.ssl.SSLPeerUnverifiedException: Hostname 192.168.0.161 not verified"
+							// on reconnect on LineageOS
+							con.setHostnameVerifier(new HostnameVerifier() {
+								@Override
+								public boolean verify(String hostname, SSLSession session) {
+									//HostnameVerifier hv = new org.apache.http.conn.ssl.StrictHostnameVerifier();
+									//boolean ret = hv.verify("192.168.0.161", session);
+									//Log.d(TAG,"intercept HostnameVerifier accept "+hostname);
+									return true;
+								}
+							});
+						}
+						/*
+						if(myWebView!=null) {
+							// avoid Mulch webview crash
+							CookieManager.getInstance().setAcceptCookie(true);
+							if(webviewCookies==null) {
+								webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
+							}
+						}
+						if(webviewCookies!=null) {
+							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)");
+							con.setRequestProperty("Cookie", webviewCookies);
+							storePrefsString("cookies", webviewCookies);
+						} else {
+							String newWebviewCookies = prefs.getString("cookies", "");
+							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)");
+							con.setRequestProperty("Cookie", newWebviewCookies);
+						}
+						*/
+						//Log.d(TAG,"intercept con.connect()");
+						con.connect();
+						int status = con.getResponseCode();
+						if(status!=200) {
+							Log.d(TAG,"# intercept http login statusCode="+status+" fail");
+						} else {
+							//Map<String,List<String>> headers = con.getHeaderFields();
+							String mime = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
+							String encoding = con.getHeaderField("content-encoding"); // null
+							int idxSemicolon = mime.indexOf(";");
+							if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+							if(encoding==null) encoding="utf-8";
+							//Log.d(TAG,"intercept 200 ("+ mime+ ") ("+ encoding+")");
+							return new WebResourceResponse(mime, encoding, con.getInputStream());
+						}
+					} catch(Exception ex) {
+						Log.d(TAG, "# intercept "+uri+" Exception="+ex);
+					}
+					//return null to tell WebView we failed to fetch it WebView should try again.
+					return null;
+				}
+
 
 				@Override
 				public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
