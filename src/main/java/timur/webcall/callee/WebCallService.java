@@ -124,6 +124,7 @@ import java.util.Calendar;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Date;
 import java.util.function.Consumer;
@@ -1546,6 +1547,14 @@ public class WebCallService extends Service {
 						con.setReadTimeout(10000);
 						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
 						con.setRequestProperty("X-WvVer", getWebviewVersion());
+
+						Map<String,String> headers = request.getRequestHeaders();
+						for(Map.Entry<String, String> entry : headers.entrySet()) {
+							if(extendedLogsFlag) {
+								Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue());
+							}
+							con.setRequestProperty(entry.getKey(), entry.getValue());
+						}
 						
 						if(insecureTlsFlag) {
 							// avoid: "javax.net.ssl.SSLPeerUnverifiedException: Hostname 192.168.0.161 not verified"
@@ -1581,17 +1590,41 @@ public class WebCallService extends Service {
 						//Log.d(TAG,"intercept con.connect()");
 						con.connect();
 						int status = con.getResponseCode();
-						if(status!=200) {
-							Log.d(TAG,"# intercept http login statusCode="+status+" fail");
-						} else {
-							//Map<String,List<String>> headers = con.getHeaderFields();
-							String mime = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
+						if(status>=200 && status<300) {
+							String contentType = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
 							String encoding = con.getHeaderField("content-encoding"); // null
+							String mime = contentType;
 							int idxSemicolon = mime.indexOf(";");
 							if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
-							if(encoding==null) encoding="utf-8";
-							//Log.d(TAG,"intercept 200 ("+ mime+ ") ("+ encoding+")");
-							return new WebResourceResponse(mime, encoding, con.getInputStream());
+							// NOTE: when contentType starts with "text/", there may be 'charset=' after idxSemicolon
+							// (text/javascript) (null) [text/javascript; charset=utf-8]
+							//if(encoding==null && mime.startsWith("text/") encoding="utf-8";
+							Log.d(TAG,"intercept "+status+" ("+ mime+ ") ("+ encoding+") ["+contentType+"] "+
+								"repMsg="+con.getResponseMessage());
+							WebResourceResponse response = new WebResourceResponse(mime, encoding, con.getInputStream());
+							Map<String,String> responseHeaders = new HashMap<String,String>();
+							Map<String,List<String>> myHeaders = con.getHeaderFields();
+							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
+								String key = ""+entry.getKey();
+								String value = ""+entry.getValue();
+								if(value.startsWith("[")) {
+									value = value.substring(1);
+								}
+								if(value.endsWith("]")) {
+									value = value.substring(0,value.length()-1);
+								}
+								if(extendedLogsFlag) {
+									Log.d(TAG,"map: "+key + "/" + value);
+								}
+								if(key!=null) {
+									responseHeaders.put(key,value);
+								}
+							}
+							response.setResponseHeaders(responseHeaders);
+							response.setStatusCodeAndReasonPhrase(status,con.getResponseMessage());
+							return response;
+						} else {
+							Log.d(TAG,"# intercept http statusCode="+status+" fail");
 						}
 					} catch(Exception ex) {
 						Log.d(TAG, "# intercept "+uri+" Exception="+ex);
