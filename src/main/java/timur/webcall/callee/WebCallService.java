@@ -1381,9 +1381,9 @@ public class WebCallService extends Service {
 						//intent.putExtra("toast", "Network error "+description);
 						statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
 					} else {
-						Log.d(TAG, "# onReceivedError code="+errorCode+" "+description+" "+failingUrl);
+						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
 						//intent.putExtra("toast", "Error "+errorCode+" "+description);
-						statusMessage("Connection error code="+errorCode+" "+description+" "+failingUrl,-1,true,false);
+						statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
 // TODO if we have started ringing we need to abort it
 					}
 					//sendBroadcast(intent);
@@ -1508,11 +1508,12 @@ public class WebCallService extends Service {
 					//final String host = uri.getHost();
 					//final String scheme = uri.getScheme();
 					final String path = uri.getPath();
-					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0) {
+					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
+//						Log.d(TAG,"intercept skip "+uri.toString());
 						return null;
 					}
 
-					Log.d(TAG, "intercept "+uri.toString());
+//					Log.d(TAG, "intercept "+uri.toString());
 					try {
 						URL url = new URL(uri.toString());
 
@@ -1553,7 +1554,11 @@ public class WebCallService extends Service {
 							if(extendedLogsFlag) {
 								Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue());
 							}
-							con.setRequestProperty(entry.getKey(), entry.getValue());
+//							if(entry.getKey().equals("Range")) {
+//								Log.d(TAG,"rh: "+entry.getKey() + " SKIP !!!!!");
+//							} else {
+								con.setRequestProperty(entry.getKey(), entry.getValue());
+//							}
 						}
 						
 						if(insecureTlsFlag) {
@@ -1590,44 +1595,48 @@ public class WebCallService extends Service {
 						//Log.d(TAG,"intercept con.connect()");
 						con.connect();
 						int status = con.getResponseCode();
+						String statusMsg = con.getResponseMessage();
 						if(status>=200 && status<300) {
 							String contentType = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
 							String encoding = con.getHeaderField("content-encoding"); // null
 							String mime = contentType;
-							int idxSemicolon = mime.indexOf(";");
-							if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+							if(mime!=null) {
+								int idxSemicolon = mime.indexOf(";");
+								if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+							}
 							// NOTE: when contentType starts with "text/", there may be 'charset=' after idxSemicolon
 							// (text/javascript) (null) [text/javascript; charset=utf-8]
 							//if(encoding==null && mime.startsWith("text/") encoding="utf-8";
-							Log.d(TAG,"intercept "+status+" ("+ mime+ ") ("+ encoding+") ["+contentType+"] "+
-								"repMsg="+con.getResponseMessage());
+
+//							Log.d(TAG,"intercept "+uri.toString()+" "+status+
+//								" ("+ mime+ ") ("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
 							WebResourceResponse response = new WebResourceResponse(mime, encoding, con.getInputStream());
 							Map<String,String> responseHeaders = new HashMap<String,String>();
 							Map<String,List<String>> myHeaders = con.getHeaderFields();
 							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
-								String key = ""+entry.getKey();
+								String key = entry.getKey();
 								String value = ""+entry.getValue();
-								if(value.startsWith("[")) {
-									value = value.substring(1);
-								}
-								if(value.endsWith("]")) {
-									value = value.substring(0,value.length()-1);
+								if(value.startsWith("[") && value.endsWith("]")) {
+									value = value.substring(1,value.length()-1);
 								}
 								if(extendedLogsFlag) {
-									Log.d(TAG,"map: "+key + "/" + value);
+									Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString());
+//								} else if(key!=null) {
+//									if(key.equals("Content-Length") || key.equals("Content-Range") ||
+//											key.equals("Content-Security-Policy")) {
+//										Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString());
+//									}
 								}
-								if(key!=null) {
-									responseHeaders.put(key,value);
-								}
+								responseHeaders.put(key,value);
 							}
 							response.setResponseHeaders(responseHeaders);
-							response.setStatusCodeAndReasonPhrase(status,con.getResponseMessage());
+							response.setStatusCodeAndReasonPhrase(status,statusMsg);
 							return response;
 						} else {
-							Log.d(TAG,"# intercept http statusCode="+status+" fail");
+							Log.d(TAG,"# intercept http status="+status+" '"+statusMsg+"' "+uri.toString());
 						}
 					} catch(Exception ex) {
-						Log.d(TAG, "# intercept "+uri+" Exception="+ex);
+						Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
 					}
 					//return null to tell WebView we failed to fetch it WebView should try again.
 					return null;
@@ -3411,9 +3420,9 @@ public class WebCallService extends Service {
 
 	private void stopRinging(String comment) {
 		// stop playing the ringtone
-		Log.d(TAG,"stopRinging from=("+comment+")");
 		ringFlag = false; // for isRingin()
 		if(ringPlayer!=null) {
+			Log.d(TAG,"stopRinging from=("+comment+")");
 			ringPlayer.stop();
 			ringPlayer = null;
 		} else {
@@ -3424,7 +3433,6 @@ public class WebCallService extends Service {
 	private void calleeIsConnected() {
 		// sessionId received
 		Log.d(TAG,"calleeIsConnected()");
-
 		postStatus("state","connected");
 
 		// problem: statusMessage() (runJS) is not always executed in doze mode
