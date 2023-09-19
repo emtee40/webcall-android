@@ -1596,7 +1596,9 @@ public class WebCallService extends Service {
 						con.connect();
 						int status = con.getResponseCode();
 						String statusMsg = con.getResponseMessage();
-						if(status>=200 && status<300) {
+
+						// statusCode can't be in the [300, 399] range
+						if(status<300 || status>=400) {
 							String contentType = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
 							String encoding = con.getHeaderField("content-encoding"); // null
 							String mime = contentType;
