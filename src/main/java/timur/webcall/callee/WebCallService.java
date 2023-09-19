@@ -136,7 +136,6 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URISyntaxException;
-//import java.net.HttpURLConnection;
 import java.nio.ByteBuffer;
 import java.io.File;
 import java.io.BufferedReader;
@@ -145,6 +144,7 @@ import java.io.UnsupportedEncodingException;
 import java.io.IOException;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.io.DataOutputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.lang.reflect.Method;
@@ -351,6 +351,7 @@ public class WebCallService extends Service {
 	private Context context = null;
 	private static volatile boolean micMuteState = false;
 	private static volatile boolean processWebRtcMessagesRunning = false;
+	private static volatile String postData = null;
 
 	// section 1: android service methods
 	@Override
@@ -1374,19 +1375,17 @@ public class WebCallService extends Service {
 					//Intent intent = new Intent("webcall");
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
-						//intent.putExtra("toast", "host lookup error. no network?");
 						statusMessage("Connection error: Host lookup",-1,true,false);
 					} else if(errorCode==ERROR_UNKNOWN) {
 						Log.d(TAG, "# onReceivedError "+description+" "+failingUrl);
-						//intent.putExtra("toast", "Network error "+description);
 						statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
 					} else {
 						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
-						//intent.putExtra("toast", "Error "+errorCode+" "+description);
 						statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
 // TODO if we have started ringing we need to abort it
 					}
 					//sendBroadcast(intent);
+		            super.onReceivedError(view, errorCode, description, failingUrl);
 				}
 
 				@TargetApi(android.os.Build.VERSION_CODES.M)
@@ -1509,11 +1508,11 @@ public class WebCallService extends Service {
 					//final String scheme = uri.getScheme();
 					final String path = uri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
-//						Log.d(TAG,"intercept skip "+uri.toString());
+						//Log.d(TAG,"intercept skip "+uri.toString());
 						return null;
 					}
 
-//					Log.d(TAG, "intercept "+uri.toString());
+					//Log.d(TAG, "intercept "+uri.toString());
 					try {
 						URL url = new URL(uri.toString());
 
@@ -1542,8 +1541,9 @@ public class WebCallService extends Service {
 							}
 						}
 
-						//Log.d(TAG,"intercept openCon("+url+")");
+						Log.d(TAG,"intercept openCon("+url+") method="+request.getMethod()+" cur="+currentUrl);
 						HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
+						con.setRequestMethod(request.getMethod());
 						con.setConnectTimeout(22000);
 						con.setReadTimeout(10000);
 						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
@@ -1554,11 +1554,7 @@ public class WebCallService extends Service {
 							if(extendedLogsFlag) {
 								Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue());
 							}
-//							if(entry.getKey().equals("Range")) {
-//								Log.d(TAG,"rh: "+entry.getKey() + " SKIP !!!!!");
-//							} else {
-								con.setRequestProperty(entry.getKey(), entry.getValue());
-//							}
+							con.setRequestProperty(entry.getKey(), entry.getValue());
 						}
 						
 						if(insecureTlsFlag) {
@@ -1576,20 +1572,31 @@ public class WebCallService extends Service {
 						}
 
 						if(myWebView!=null) {
-							// avoid Mulch webview crash
 							CookieManager.getInstance().setAcceptCookie(true);
 							if(webviewCookies==null) {
-								webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
+								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
+								webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
+								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webviewCookies);
 							}
 						}
 						if(webviewCookies!=null) {
-							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)");
+							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)="+webviewCookies);
 							con.setRequestProperty("Cookie", webviewCookies);
 							storePrefsString("cookies", webviewCookies);
 						} else {
 							String newWebviewCookies = prefs.getString("cookies", "");
-							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)");
+							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)="+newWebviewCookies);
 							con.setRequestProperty("Cookie", newWebviewCookies);
+						}
+
+						if(request.getMethod()!=null && request.getMethod().equals("POST") && postData!=null) {
+							//Log.d(TAG,"intercept setDoOutput "+postData);
+							con.setDoOutput(true);
+							DataOutputStream wr = new DataOutputStream(con.getOutputStream());
+							wr.writeBytes(postData);
+							wr.flush();
+							wr.close();
+							postData = null;
 						}
 
 						//Log.d(TAG,"intercept con.connect()");
@@ -1610,8 +1617,8 @@ public class WebCallService extends Service {
 							// (text/javascript) (null) [text/javascript; charset=utf-8]
 							//if(encoding==null && mime.startsWith("text/") encoding="utf-8";
 
-//							Log.d(TAG,"intercept "+uri.toString()+" "+status+
-//								" ("+ mime+ ") ("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
+							//Log.d(TAG,"intercept "+uri.toString()+" "+status+
+							//	" ("+ mime+ ") ("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
 							WebResourceResponse response = new WebResourceResponse(mime, encoding, con.getInputStream());
 							Map<String,String> responseHeaders = new HashMap<String,String>();
 							Map<String,List<String>> myHeaders = con.getHeaderFields();
@@ -1623,19 +1630,25 @@ public class WebCallService extends Service {
 								}
 								if(extendedLogsFlag) {
 									Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString());
-//								} else if(key!=null) {
-//									if(key.equals("Content-Length") || key.equals("Content-Range") ||
-//											key.equals("Content-Security-Policy")) {
-//										Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString());
-//									}
 								}
+								if(key!=null && key.equals("Set-Cookie")) {
+									webviewCookies = value;
+									Log.d(TAG,"intercept storePrefs cookie="+webviewCookies);
+									storePrefsString("cookies", webviewCookies);
+									if(myWebView!=null) {
+										Log.d(TAG,"intercept setCookie currentUrl="+currentUrl);
+										CookieManager.getInstance().setAcceptCookie(true);
+										CookieManager.getInstance().setCookie(currentUrl,webviewCookies);
+									}
+								}
+
 								responseHeaders.put(key,value);
 							}
 							response.setResponseHeaders(responseHeaders);
 							response.setStatusCodeAndReasonPhrase(status,statusMsg);
 							return response;
 						} else {
-							Log.d(TAG,"# intercept http status="+status+" '"+statusMsg+"' "+uri.toString());
+							//Log.d(TAG,"intercept skip http status="+status+" '"+statusMsg+"' "+uri.toString());
 						}
 					} catch(Exception ex) {
 						Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
@@ -1684,7 +1697,7 @@ public class WebCallService extends Service {
 					Log.d(TAG, "onPageFinished currentUrl=" + currentUrl);
 					//webviewMainPageLoaded = false;
 					webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
-					//Log.d(TAG, "onPageFinished webviewCookies=" + webviewCookies);
+					Log.d(TAG, "onPageFinished webviewCookies=" + webviewCookies);
 					if(webviewCookies!=null) {
 						storePrefsString("cookies", webviewCookies);
 					}
@@ -2354,6 +2367,13 @@ public class WebCallService extends Service {
 			Log.d(TAG, "JS isTextmode() "+textmode);
 			return textmode; // set by JS onMessage()
 		}
+
+		@android.webkit.JavascriptInterface
+		public void postRequestData(String data) {
+			postData = data;
+			Log.d(TAG, "JS postRequestData()");
+		}
+
 
 		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
@@ -3941,14 +3961,14 @@ public class WebCallService extends Service {
 					}
 					if(webviewCookies!=null) {
 						//if(extendedLogsFlag) {
-							Log.d(TAG,"reconnecter con.setRequestProperty(webviewCookies)");
+							Log.d(TAG,"reconnecter con.setRequestProperty(webviewCookies)="+webviewCookies);
 						//}
 						con.setRequestProperty("Cookie", webviewCookies);
 						storePrefsString("cookies", webviewCookies);
 					} else {
 						String newWebviewCookies = prefs.getString("cookies", "");
 						//if(extendedLogsFlag) {
-							Log.d(TAG,"reconnecter con.setRequestProperty(prefs:cookies)");
+							Log.d(TAG,"reconnecter con.setRequestProperty(prefs:cookies)="+newWebviewCookies);
 						//}
 						con.setRequestProperty("Cookie", newWebviewCookies);
 					}
