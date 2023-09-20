@@ -130,6 +130,7 @@ import java.util.Date;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
 import java.util.Locale;
+import java.util.Set;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.net.URI;
@@ -174,6 +175,16 @@ import org.java_websocket.framing.Framedata;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.Headers;
+import okhttp3.FormBody;
+
 import timur.webcall.callee.BuildConfig;
 
 public class WebCallService extends Service {
@@ -189,7 +200,7 @@ public class WebCallService extends Service {
 	private final static Intent startAlarmIntent = new Intent(startAlarmString);
 
 	private final static String readyToReceiveCallsString = "Ready to receive calls";
-	private final static String connectedToServerString = "Connected"; // same as readyToReceive, but during peerCon
+	private final static String connectedToServerString = "Connected to WebCall server"; // during peerCon
 	private final static String offlineMessage = "WebCall server disconnected"; // used to be "Offline";
 
 	// for callInProgressNotification()
@@ -852,7 +863,7 @@ public class WebCallService extends Service {
 			}
 			Log.d(TAG,"onStartCommand startForeground: "+msg);
 			startForeground(NOTIF_ID1,buildServiceNotification(msg, NOTIF_LOW, NotificationCompat.PRIORITY_LOW));
-			statusMessage(msg,-1,true,false);
+			statusMessage(msg,-1,true,true);
 		}
 
 		// we now consider the service alive
@@ -1381,6 +1392,7 @@ public class WebCallService extends Service {
 						statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
 					} else {
 						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
+// TODO errorCode == "net::ERR_FAILED" is not reliable (at least not when we do intercept)
 						statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
 // TODO if we have started ringing we need to abort it
 					}
@@ -1512,12 +1524,113 @@ public class WebCallService extends Service {
 						return null;
 					}
 
-					//Log.d(TAG, "intercept "+uri.toString());
-					try {
-						URL url = new URL(uri.toString());
+					if(insecureTlsFlag) {
+						return null;
+					}
 
+					boolean logging=extendedLogsFlag;
+					//if(uri.toString().indexOf("busy-signal.mp3")>=0 || extendedLogsFlag) {
+					//if(uri.toString().indexOf(".mp3")>=0 || extendedLogsFlag) {
+					//	logging=true;
+					//}
+					try {
+						if(logging) {
+							Log.d(TAG,"intercept ("+uri+") method="+request.getMethod()+" curUrl="+currentUrl);
+						}
+
+						OkHttpClient client = new OkHttpClient();
+						Request.Builder builder = new Request.Builder();
+						builder.url(uri.toString());
+
+						if(request.getMethod()=="POST" && postData!=null) {
+							RequestBody body = RequestBody.create(postData.getBytes(),MediaType.get("text"));
+							builder.post(body);
+						}
+
+						Map<String,String> requestHeaders = request.getRequestHeaders();
+						requestHeaders.put("X-WcVer", BuildConfig.VERSION_NAME);
+						requestHeaders.put("X-WvVer", getWebviewVersion());
+
+						if(myWebView!=null) {
+							CookieManager.getInstance().setAcceptCookie(true);
+							if(webviewCookies==null) {
+								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
+								webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
+								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webviewCookies);
+							}
+						}
+						if(webviewCookies!=null) {
+							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)="+webviewCookies);
+							requestHeaders.put("Cookie", webviewCookies);
+							storePrefsString("cookies", webviewCookies);
+						} else {
+							String newWebviewCookies = prefs.getString("cookies", "");
+							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)="+newWebviewCookies);
+							requestHeaders.put("Cookie", newWebviewCookies);
+						}
+
+						if(logging) {
+							for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
+								Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue());
+							}
+						}
+
+						Headers headerbuild = Headers.of(requestHeaders);
+						builder.headers(headerbuild);
+
+						Request requestOK = builder.build();
+						Response responseOK = client.newCall(requestOK).execute();
+
+						int status = responseOK.code();
+						String statusMsg = responseOK.message();
+						// statusCode can't be in the [300, 399] range
+						if(status<300 || status>=400) {
+							Headers responseHeadersOK = responseOK.headers();
+							String contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
+							String encoding = responseHeadersOK.get("content-encoding");
+							if(logging) {
+								Log.d(TAG,"intercept "+uri.toString()+" "+status+" ("+ contentType+ ") "+
+										"("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
+								Set<String> headerNamesSet = responseHeadersOK.names();
+								//for(String name : headerNamesSet) {
+								//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
+								//}
+							}
+
+							WebResourceResponse response =
+								new WebResourceResponse(contentType, encoding, responseOK.body().byteStream());
+							Map<String,String> responseHeaders = new HashMap<String,String>();
+							Map<String,List<String>> myHeaders = responseHeadersOK.toMultimap();
+
+							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
+								String key = entry.getKey();
+								String value = ""+entry.getValue();
+								if(value.startsWith("[") && value.endsWith("]")) {
+									value = value.substring(1,value.length()-1);
+								}
+								if(logging) { Log.d(TAG,"respHdr: "+key + "/" + value+" "+uri.toString()); }
+								if(key!=null && key.equals("Set-Cookie")) {
+									webviewCookies = value;
+									if(logging) { Log.d(TAG,"intercept storePrefs cookie="+webviewCookies); }
+									storePrefsString("cookies", webviewCookies);
+									if(myWebView!=null) {
+										if(logging) { Log.d(TAG,"intercept setCookie currentUrl="+currentUrl); }
+										CookieManager.getInstance().setAcceptCookie(true);
+										CookieManager.getInstance().setCookie(currentUrl,webviewCookies);
+									}
+								}
+
+								responseHeaders.put(key,value);
+							}
+							response.setResponseHeaders(responseHeaders);
+							response.setStatusCodeAndReasonPhrase(status,statusMsg);
+							return response;
+						}
+
+/*
+						URL url = new URL(uri.toString());
 						if(insecureTlsFlag) {
-							//Log.d(TAG,"intercept allow insecure https");
+							if(logging) { Log.d(TAG,"intercept allow insecure https"); }
 							try {
 								TrustManager[] trustAllCerts = new TrustManager[] {
 									new X509TrustManager() {
@@ -1541,22 +1654,19 @@ public class WebCallService extends Service {
 							}
 						}
 
-						Log.d(TAG,"intercept openCon("+url+") method="+request.getMethod()+" cur="+currentUrl);
 						HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
 						con.setRequestMethod(request.getMethod());
-						con.setConnectTimeout(22000);
+						con.setConnectTimeout(10000);
 						con.setReadTimeout(10000);
 						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
 						con.setRequestProperty("X-WvVer", getWebviewVersion());
 
 						Map<String,String> headers = request.getRequestHeaders();
 						for(Map.Entry<String, String> entry : headers.entrySet()) {
-							if(extendedLogsFlag) {
-								Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue());
-							}
+							if(logging) { Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue()); }
 							con.setRequestProperty(entry.getKey(), entry.getValue());
 						}
-						
+
 						if(insecureTlsFlag) {
 							// avoid: "javax.net.ssl.SSLPeerUnverifiedException: Hostname 192.168.0.161 not verified"
 							// on reconnect on LineageOS
@@ -1590,7 +1700,7 @@ public class WebCallService extends Service {
 						}
 
 						if(request.getMethod()!=null && request.getMethod().equals("POST") && postData!=null) {
-							//Log.d(TAG,"intercept setDoOutput "+postData);
+							if(logging) { Log.d(TAG,"intercept setDoOutput "+postData); }
 							con.setDoOutput(true);
 							DataOutputStream wr = new DataOutputStream(con.getOutputStream());
 							wr.writeBytes(postData);
@@ -1599,7 +1709,7 @@ public class WebCallService extends Service {
 							postData = null;
 						}
 
-						//Log.d(TAG,"intercept con.connect()");
+						if(logging) { Log.d(TAG,"intercept con.connect()"); }
 						con.connect();
 						int status = con.getResponseCode();
 						String statusMsg = con.getResponseMessage();
@@ -1617,8 +1727,11 @@ public class WebCallService extends Service {
 							// (text/javascript) (null) [text/javascript; charset=utf-8]
 							//if(encoding==null && mime.startsWith("text/") encoding="utf-8";
 
-							//Log.d(TAG,"intercept "+uri.toString()+" "+status+
-							//	" ("+ mime+ ") ("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
+							if(logging) {
+								Log.d(TAG,"intercept "+uri.toString()+" "+status+" ("+ mime+ ") "+
+										"("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
+							}
+
 							WebResourceResponse response = new WebResourceResponse(mime, encoding, con.getInputStream());
 							Map<String,String> responseHeaders = new HashMap<String,String>();
 							Map<String,List<String>> myHeaders = con.getHeaderFields();
@@ -1628,9 +1741,7 @@ public class WebCallService extends Service {
 								if(value.startsWith("[") && value.endsWith("]")) {
 									value = value.substring(1,value.length()-1);
 								}
-								if(extendedLogsFlag) {
-									Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString());
-								}
+								if(logging) { Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString()); }
 								if(key!=null && key.equals("Set-Cookie")) {
 									webviewCookies = value;
 									Log.d(TAG,"intercept storePrefs cookie="+webviewCookies);
@@ -1648,8 +1759,9 @@ public class WebCallService extends Service {
 							response.setStatusCodeAndReasonPhrase(status,statusMsg);
 							return response;
 						} else {
-							//Log.d(TAG,"intercept skip http status="+status+" '"+statusMsg+"' "+uri.toString());
+							if(logging) { Log.d(TAG,"intercept skip http status="+status+" '"+statusMsg+"' "+uri); }
 						}
+*/
 					} catch(Exception ex) {
 						Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
 					}
@@ -3463,9 +3575,12 @@ public class WebCallService extends Service {
 		if(ringFlag) {
 			Log.d(TAG,"calleeIsConnected() status('Incoming call')");
 			statusMessage("Incoming call",-1,true,false);
+		} else if(callPickedUpFlag || peerConnectFlag) {
+			Log.d(TAG,"calleeIsConnected() status(connectedToServerString)");
+			statusMessage(connectedToServerString,-1,true,true);
 		} else {
 			Log.d(TAG,"calleeIsConnected() status(readyToReceiveCallsString)");
-			statusMessage(readyToReceiveCallsString,-1,true,false);
+			statusMessage(readyToReceiveCallsString,-1,true,true);
 		}
 
 		// peerConCreateOffer() does not trigger onIceCandidate() callbacks
@@ -4888,8 +5003,8 @@ public class WebCallService extends Service {
 	protected void runJS(final String str, final ValueCallback<String> myBlock) {
 		// str can be very long, we just log the 1st 30 chars
 		String logstr = str;
-		if(logstr.length()>40) {
-			logstr = logstr.substring(0,40);
+		if(logstr.length()>56) {
+			logstr = logstr.substring(0,56);
 		}
 		if(myWebView==null) {
 			Log.d(TAG, "! runJS("+logstr+") but no webview");
@@ -5150,10 +5265,10 @@ public class WebCallService extends Service {
 			Log.d(TAG,"statusMessage: no display of empty message");
 		} else {
 			String dispMsg = message;
-			Log.d(TAG,"statusMessage: "+dispMsg+" (n="+notifi+")");
+			Log.d(TAG,"statusMessage: "+dispMsg+" (n="+notifi+") (u="+urgent+")");
 			// encodedMsg MUST NOT contain apostrophe
 			String encodedMsg = dispMsg.replace("'", "&#39;");
-			runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");",null);
+			runJS("showStatus('"+encodedMsg+"',"+timeoutMs+","+urgent+");",null);
 			//runJS("showStatus('"+encodedMsg+"',"+timeoutMs+");", new ValueCallback<String>() {
 			//	@Override
 			//	public void onReceiveValue(String s) {

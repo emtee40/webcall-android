@@ -6,8 +6,8 @@ android {
 		applicationId "timur.webcall.callee"
 		minSdkVersion 21
 		targetSdkVersion 31
-		versionCode 132
-		versionName "1.4.8"
+		versionCode 133
+		versionName "1.4.9"
 	}
 	signingConfigs {
 		release {
@@ -86,7 +86,7 @@ dependencies {
 	implementation 'androidx.appcompat:appcompat:1.4.0'
 	implementation 'org.java-websocket:Java-WebSocket:1.5.2'
 	//implementation 'com.squareup.okhttp3:okhttp:3.14.6'
-	//implementation 'com.squareup.okhttp3:okhttp:4.3.1'
+	implementation 'com.squareup.okhttp3:okhttp:4.3.1'
 }
 tasks.withType(JavaCompile) {
 	//options.compilerArgs << '-Xlint:unchecked'
