@@ -154,6 +154,7 @@ import java.lang.reflect.Method;
 
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
+import java.security.cert.CertificateException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import javax.net.ssl.HostnameVerifier;
@@ -184,6 +185,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okhttp3.Headers;
 import okhttp3.FormBody;
 
@@ -1385,21 +1387,18 @@ public class WebCallService extends Service {
 				@SuppressWarnings("deprecation")
 				@Override
 				public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-					// must tell user
-					//Intent intent = new Intent("webcall");
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
 						statusMessage("Connection error: Host lookup",-1,true,false);
 					} else if(errorCode==ERROR_UNKNOWN) {
-						Log.d(TAG, "# onReceivedError "+description+" "+failingUrl);
-						statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
+						Log.d(TAG, "# onReceivedError ERROR_UNKNOWN "+description+" "+failingUrl);
+						//statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
 					} else {
 						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
-// TODO errorCode == "net::ERR_FAILED" is not reliable (at least not when we do intercept)
+// TODO errorCode == "net::ERR_FAILED" is not reliable (at least not when we do jntercept)
 						//statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
 // TODO if we have started ringing we need to abort it
 					}
-					//sendBroadcast(intent);
 		            super.onReceivedError(view, errorCode, description, failingUrl);
 				}
 
@@ -1432,7 +1431,7 @@ public class WebCallService extends Service {
 						Log.d(TAG, "onReceivedSslError (proceed) "+error);
 						handler.proceed();
 					} else {
-						// err can not be ignored
+						// error can not be ignored!
 						// but this ssl error does not return an err in JS
 						Log.d(TAG, "# onReceivedSslError "+error);
 						super.onReceivedSslError(view, handler, error);
@@ -1517,17 +1516,24 @@ public class WebCallService extends Service {
 				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 				@Override
 				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+					boolean logging = extendedLogsFlag;
+/*
+					if(insecureTlsFlag) {
+						if(logging) {
+							Log.d(TAG,"intercept insecureTlsFlag skip "+uri.toString());
+						}
+						return null;
+					}
+*/
 					final Uri uri = request.getUrl();
 					//Log.i(TAG, "handleUri " + uri);
 					//final String host = uri.getHost();
 					//final String scheme = uri.getScheme();
 					final String path = uri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
-						//Log.d(TAG,"intercept skip "+uri.toString());
-						return null;
-					}
-
-					if(insecureTlsFlag) {
+						if(logging) {
+							Log.d(TAG,"intercept skip "+uri.toString());
+						}
 						return null;
 					}
 
@@ -1538,13 +1544,15 @@ public class WebCallService extends Service {
 								//@Nullable
 								@Override
 								public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+									if(logging) {
+										Log.d(TAG,"worker shouldInterceptRequest "+request.getUrl());
+									}
 									return super.shouldInterceptRequest(request);
 								}
 							});
 						}
 					}
 
-					boolean logging=extendedLogsFlag;
 					//if(uri.toString().indexOf("busy-signal.mp3")>=0 || extendedLogsFlag) {
 					//if(uri.toString().indexOf(".mp3")>=0 || extendedLogsFlag) {
 					//	logging=true;
@@ -1554,7 +1562,54 @@ public class WebCallService extends Service {
 							Log.d(TAG,"intercept ("+uri+") method="+request.getMethod()+" curUrl="+currentUrl);
 						}
 
-						OkHttpClient client = new OkHttpClient();
+						OkHttpClient okClient;
+
+						if(insecureTlsFlag) {
+							OkHttpClient.Builder okClientBuilder = new OkHttpClient.Builder();
+							X509TrustManager trustAllCerts = new X509TrustManager() {
+								@Override
+								public X509Certificate[] getAcceptedIssuers() {
+									if(logging) {
+										//Log.d(TAG,"intercept getAcceptedIssuers()");
+									}
+									return new java.security.cert.X509Certificate[]{};
+								}
+								@Override
+								public void checkClientTrusted(X509Certificate[] chain, String authType)
+										throws CertificateException {
+									if(logging) {
+										//Log.d(TAG,"intercept checkClientTrusted() "+authType);
+									}
+								}
+								@Override
+								public void checkServerTrusted(X509Certificate[] chain, String authType)
+										throws CertificateException {
+									if(logging) {
+										//Log.d(TAG,"intercept checkServerTrusted() "+authType);
+									}
+								}
+							};
+
+							SSLContext sslContext = SSLContext.getInstance("TLS");
+							sslContext.init(null, new TrustManager[] { trustAllCerts }, new SecureRandom());
+							okClientBuilder.sslSocketFactory(sslContext.getSocketFactory(), trustAllCerts);
+
+							okClientBuilder.hostnameVerifier(new HostnameVerifier() {
+								@Override
+								public boolean verify(String hostname, SSLSession session) {
+									//HostnameVerifier hv = new org.apache.http.conn.ssl.StrictHostnameVerifier();
+									//boolean ret = hv.verify("192.168.0.161", session);
+									if(logging) {
+										//Log.d(TAG,"intercept HostnameVerifier accept "+hostname);
+									}
+									return true;
+								}
+							});
+							okClient = okClientBuilder.build();
+						} else {
+							okClient = new OkHttpClient();
+						}
+
 						Request.Builder builder = new Request.Builder();
 						builder.url(uri.toString());
 
@@ -1586,26 +1641,49 @@ public class WebCallService extends Service {
 						}
 
 						if(logging) {
-							for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
-								Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+uri.toString());
-							}
+							// show request headers
+							//for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
+							//	Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+uri.toString());
+							//}
 						}
 
 						builder.headers(Headers.of(requestHeaders));
 						Request requestOK = builder.build();
 
-						Response responseOK = client.newCall(requestOK).execute();
+						// now send the request
+						Response responseOK = okClient.newCall(requestOK).execute();
 
 						int status = responseOK.code();
 						String statusMsg = responseOK.message();
+						if(statusMsg==null || statusMsg=="") {
+							statusMsg = "OK";
+						}
+
 						// statusCode can't be in the [300, 399] range
 						if(status<300 || status>=400) {
+							//ResponseBody responseBodyOK = responseOK.body();
 							Headers responseHeadersOK = responseOK.headers();
+
 							String contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
+							//String contentType = responseBodyOK.contentType().toString();
+							String mime = contentType;
+							if(mime!=null) {
+								int idxSemicolon = mime.indexOf(";");
+								if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+							}
+
 							String encoding = responseHeadersOK.get("content-encoding");
+							if(encoding==null &&
+									//(responseBodyOK.contentType().type().equals("text") ||
+									(contentType.startsWith("text") ||
+									 contentType.equals("image/svg+xml"))) {
+								encoding = "utf-8";
+							}
+
+
 							if(logging) {
-								Log.d(TAG,"intercept "+uri.toString()+" "+status+" ("+ contentType+ ") "+
-										"("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
+								Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
+										"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + uri);
 								//Set<String> headerNamesSet = responseHeadersOK.names();
 								//for(String name : headerNamesSet) {
 								//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
@@ -1613,17 +1691,23 @@ public class WebCallService extends Service {
 							}
 
 							WebResourceResponse response =
-								new WebResourceResponse(contentType, encoding, responseOK.body().byteStream());
+								new WebResourceResponse(mime, encoding, responseOK.body().byteStream());
 							Map<String,String> responseHeaders = new HashMap<String,String>();
 							Map<String,List<String>> myHeaders = responseHeadersOK.toMultimap();
 
 							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
 								String key = entry.getKey();
-								String value = ""+entry.getValue();
-								if(value.startsWith("[") && value.endsWith("]")) {
-									value = value.substring(1,value.length()-1);
+								// the first list entry seems to contain the complete balue
+								String value = entry.getValue().get(0);
+								//if(value.startsWith("[") && value.endsWith("]")) {
+								//	value = value.substring(1,value.length()-1);
+								//}
+								if(logging) {
+									Log.d(TAG,"respHdr: "+key + " (" + value +") "+uri.toString());
+									//if(key.equals("content-security-policy")) {
+									//	Log.d(TAG,"====== {"+entry.getValue().get(0)+"} {"+entry.getValue().get(0)+"}");
+									//}
 								}
-								if(logging) { Log.d(TAG,"respHdr: "+key + "/" + value+" "+uri.toString()); }
 								if(key!=null && key.equals("Set-Cookie")) {
 									webviewCookies = value;
 									if(logging) { Log.d(TAG,"intercept storePrefs cookie="+webviewCookies); }
@@ -1639,6 +1723,8 @@ public class WebCallService extends Service {
 							}
 							response.setResponseHeaders(responseHeaders);
 							response.setStatusCodeAndReasonPhrase(status,statusMsg);
+							//responseBodyOK.close();
+							//responseOK.close();
 							return response;
 						}
 
