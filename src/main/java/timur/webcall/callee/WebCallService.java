@@ -1558,9 +1558,9 @@ public class WebCallService extends Service {
 					//	logging=true;
 					//}
 					try {
-						if(logging) {
-							Log.d(TAG,"intercept ("+uri+") method="+request.getMethod()+" curUrl="+currentUrl);
-						}
+						//if(logging) {
+							Log.d(TAG,"intercept "+request.getMethod()+" ("+uri+") curUrl="+currentUrl);
+						//}
 
 						OkHttpClient okClient;
 
@@ -1610,12 +1610,20 @@ public class WebCallService extends Service {
 							okClient = new OkHttpClient();
 						}
 
-						Request.Builder builder = new Request.Builder();
-						builder.url(uri.toString());
+						Request.Builder requestBuilder = new Request.Builder();
+						requestBuilder.url(uri.toString());
 
-						if(request.getMethod()=="POST" && postData!=null) {
-							RequestBody body = RequestBody.create(postData.getBytes(),MediaType.get("text"));
-							builder.post(body);
+						if(request.getMethod().equals("POST")) {
+							if(postData!=null) {
+								//Log.d(TAG,"intercept ("+request.getMethod()+") ("+postData+")...");
+								Log.d(TAG,"intercept ("+request.getMethod()+") send postData "+postData.length());
+								RequestBody body = RequestBody.create(postData.getBytes(),MediaType.get("text/plain"));
+								requestBuilder.post(body);
+							} else {
+								Log.d(TAG,"# intercept ("+request.getMethod()+") no postData");
+							}
+						} else {
+							//Log.d(TAG,"intercept ("+request.getMethod()+")");
 						}
 
 						Map<String,String> requestHeaders = request.getRequestHeaders();
@@ -1630,7 +1638,7 @@ public class WebCallService extends Service {
 								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webviewCookies);
 							}
 						}
-						if(webviewCookies!=null) {
+						if(webviewCookies!=null && webviewCookies!="") {
 							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)="+webviewCookies);
 							requestHeaders.put("Cookie", webviewCookies);
 							//storePrefsString("cookies", webviewCookies);
@@ -1647,8 +1655,8 @@ public class WebCallService extends Service {
 							//}
 						}
 
-						builder.headers(Headers.of(requestHeaders));
-						Request requestOK = builder.build();
+						requestBuilder.headers(Headers.of(requestHeaders));
+						Request requestOK = requestBuilder.build();
 
 						// now send the request
 						Response responseOK = okClient.newCall(requestOK).execute();
@@ -1673,7 +1681,9 @@ public class WebCallService extends Service {
 							}
 
 							String encoding = responseHeadersOK.get("content-encoding");
-							if(encoding==null &&
+							if(encoding==null) {
+								encoding = "utf-8";
+							} else if(contentType!=null &&
 									//(responseBodyOK.contentType().type().equals("text") ||
 									(contentType.startsWith("text") ||
 									 contentType.equals("image/svg+xml"))) {
@@ -1699,23 +1709,19 @@ public class WebCallService extends Service {
 								String key = entry.getKey();
 								// the first list entry seems to contain the complete balue
 								String value = entry.getValue().get(0);
-								//if(value.startsWith("[") && value.endsWith("]")) {
-								//	value = value.substring(1,value.length()-1);
-								//}
 								if(logging) {
 									Log.d(TAG,"respHdr: "+key + " (" + value +") "+uri.toString());
-									//if(key.equals("content-security-policy")) {
-									//	Log.d(TAG,"====== {"+entry.getValue().get(0)+"} {"+entry.getValue().get(0)+"}");
-									//}
 								}
-								if(key!=null && key.equals("Set-Cookie")) {
-									webviewCookies = value;
-									if(logging) { Log.d(TAG,"intercept storePrefs cookie="+webviewCookies); }
-									storePrefsString("cookies", webviewCookies);
-									if(myWebView!=null) {
-										if(logging) { Log.d(TAG,"intercept setCookie currentUrl="+currentUrl); }
-										CookieManager.getInstance().setAcceptCookie(true);
-										CookieManager.getInstance().setCookie(currentUrl,webviewCookies);
+								if(key!=null && (key.equals("Set-Cookie") || key.equals("set-cookie"))) {
+									if(value!="") {
+										webviewCookies = value;
+										Log.d(TAG,"intercept storePrefs cookie="+webviewCookies);
+										storePrefsString("cookies", webviewCookies);
+										if(myWebView!=null) {
+											Log.d(TAG,"intercept setCookie currentUrl="+currentUrl);
+											CookieManager.getInstance().setAcceptCookie(true);
+											CookieManager.getInstance().setCookie(currentUrl,webviewCookies);
+										}
 									}
 								}
 
@@ -1911,7 +1917,7 @@ public class WebCallService extends Service {
 					//webviewMainPageLoaded = false;
 					webviewCookies = CookieManager.getInstance().getCookie(currentUrl);
 					Log.d(TAG, "onPageFinished webviewCookies=" + webviewCookies);
-					if(webviewCookies!=null) {
+					if(webviewCookies!=null && webviewCookies!="") {
 						storePrefsString("cookies", webviewCookies);
 					}
 
@@ -2493,7 +2499,6 @@ public class WebCallService extends Service {
 			}
 			//Log.d(TAG,"JS base64Data="+base64Data);
 			try {
-				// tmtmtm
 				byte[] blobAsBytes = Base64.decode(base64Data,Base64.DEFAULT);
 				Log.d(TAG,"JS bytearray len="+blobAsBytes.length);
 
@@ -2586,7 +2591,6 @@ public class WebCallService extends Service {
 			postData = data;
 			Log.d(TAG, "JS postRequestData()");
 		}
-
 
 		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
@@ -4111,13 +4115,17 @@ public class WebCallService extends Service {
 				}
 
 				if(!connectToServerIsWanted) {
-					Log.d(TAG,"reconnecter not wanted, aborted");
+					Log.d(TAG,"reconnecter not wanted, abort");
+					return;
+				}
+
+				if(calleeIsReady) { // set by JS calleeReady()
+					Log.d(TAG,"reconnecter not needed, calleeIsReady, abort");
 					return;
 				}
 
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl);
-
 				statusMessage("Login "+loginUserName,-1,true,false);
 				try {
 					URL url = new URL(loginUrl);
@@ -4175,18 +4183,25 @@ public class WebCallService extends Service {
 							webviewCookies = CookieManager.getInstance().getCookie(loginUrl);
 						}
 					}
-					if(webviewCookies!=null) {
+					if(webviewCookies!=null && webviewCookies!="") {
 						//if(extendedLogsFlag) {
 							Log.d(TAG,"reconnecter con.setRequestProperty(webviewCookies)="+webviewCookies);
 						//}
 						con.setRequestProperty("Cookie", webviewCookies);
 						storePrefsString("cookies", webviewCookies);
 					} else {
-						String newWebviewCookies = prefs.getString("cookies", "");
-						//if(extendedLogsFlag) {
-							Log.d(TAG,"reconnecter con.setRequestProperty(prefs:cookies)="+newWebviewCookies);
-						//}
-						con.setRequestProperty("Cookie", newWebviewCookies);
+						webviewCookies = prefs.getString("cookies", "");
+						if(webviewCookies!=null && webviewCookies!="") {
+							//if(extendedLogsFlag) {
+								Log.d(TAG,"reconnecter con.setRequestProperty(prefs:cookies)="+webviewCookies);
+							//}
+							con.setRequestProperty("Cookie", webviewCookies);
+						} else {
+							// abort
+							Log.d(TAG,"# reconnecter no pw cookie, abort");
+							statusMessage("No password cookie. Reconnector aborted.",-1,true,false);
+							reconnectBusy = false;
+						}
 					}
 					if(!reconnectBusy) {
 						Log.d(TAG,"reconnecter abort");
