@@ -4125,7 +4125,7 @@ public class WebCallService extends Service {
 				}
 
 				if(calleeIsConnectedFlag) { // set by JS calleeReady()
-					Log.d(TAG,"reconnecter not needed, calleeIsReady, abort");
+					Log.d(TAG,"reconnecter not needed, calleeIsConnected, abort");
 					return;
 				}
 
@@ -5745,6 +5745,7 @@ public class WebCallService extends Service {
 
 		if(newNetworkInt<=0 && oldNetworkInt>0) {
 			// lost network
+			calleeIsConnected = false;
 			if(connectToServerIsWanted) {
 				if(oldNetworkInt==2) {
 					Log.d(TAG,"networkChange lost Wifi");
