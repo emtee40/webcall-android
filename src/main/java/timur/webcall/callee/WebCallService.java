@@ -5745,7 +5745,7 @@ public class WebCallService extends Service {
 
 		if(newNetworkInt<=0 && oldNetworkInt>0) {
 			// lost network
-			calleeIsConnected = false;
+			calleeIsConnectedFlag = false;
 			if(connectToServerIsWanted) {
 				if(oldNetworkInt==2) {
 					Log.d(TAG,"networkChange lost Wifi");
