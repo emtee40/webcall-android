@@ -352,6 +352,7 @@ public class WebCallService extends Service {
 	private static volatile boolean autoPickup = false;
 	private static volatile MediaPlayer ringPlayer = null;
 	private static volatile boolean calleeIsReady = false;
+	private static volatile boolean calleeIsConnectedFlag = false;
 	private static volatile boolean stopSelfFlag = false;
 	private static volatile boolean ringFlag = false;
 	private static volatile boolean textmode = false;
@@ -2595,6 +2596,8 @@ public class WebCallService extends Service {
 		@android.webkit.JavascriptInterface
 		public boolean calleeReady() {
 			// called from gotStream2()
+			// this means the callee webapp is ready to receive messages
+			// does NOT mean it is online (connected to server)
 			calleeIsReady = true;
 			if(!processWebRtcMessagesRunning) {
 				if(!stringMessageQueue.isEmpty()) {
@@ -2620,6 +2623,7 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public void calleeConnected() {
+			// callee.js telling us that it connected to the server
 			Log.d(TAG,"JS calleeConnected()");
 			calleeIsConnected();
 		}
@@ -3672,6 +3676,7 @@ public class WebCallService extends Service {
 	private void calleeIsConnected() {
 		// sessionId received
 		Log.d(TAG,"calleeIsConnected()");
+		calleeIsConnectedFlag = true;
 		postStatus("state","connected");
 
 		// problem: statusMessage() (runJS) is not always executed in doze mode
@@ -4119,7 +4124,7 @@ public class WebCallService extends Service {
 					return;
 				}
 
-				if(calleeIsReady) { // set by JS calleeReady()
+				if(calleeIsConnectedFlag) { // set by JS calleeReady()
 					Log.d(TAG,"reconnecter not needed, calleeIsReady, abort");
 					return;
 				}
@@ -4994,6 +4999,7 @@ public class WebCallService extends Service {
 		Log.d(TAG,"disconnectHost "+sendNotification+" "+skipStopForeground);
 
 		calleeIsReady = false;
+		calleeIsConnectedFlag = false;
 		if(pendingAlarm!=null) {
 			alarmManager.cancel(pendingAlarm);
 			pendingAlarm = null;
