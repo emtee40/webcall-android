@@ -1396,7 +1396,7 @@ public class WebCallService extends Service {
 					} else {
 						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
 // TODO errorCode == "net::ERR_FAILED" is not reliable (at least not when we do intercept)
-						statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
+						//statusMessage("Error "+errorCode+" "+description+" "+failingUrl,-1,true,false);
 // TODO if we have started ringing we need to abort it
 					}
 					//sendBroadcast(intent);
