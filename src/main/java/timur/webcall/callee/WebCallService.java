@@ -78,6 +78,8 @@ import android.webkit.DownloadListener;
 import android.webkit.URLUtil;
 import android.webkit.SslErrorHandler;
 import android.webkit.ClientCertRequest;
+import android.webkit.ServiceWorkerController;
+import android.webkit.ServiceWorkerClient;
 import android.app.KeyguardManager;
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -363,6 +365,7 @@ public class WebCallService extends Service {
 	private static volatile boolean micMuteState = false;
 	private static volatile boolean processWebRtcMessagesRunning = false;
 	private static volatile String postData = null;
+	private static volatile ServiceWorkerController serviceWorkerController = null;
 
 	// section 1: android service methods
 	@Override
@@ -1528,6 +1531,19 @@ public class WebCallService extends Service {
 						return null;
 					}
 
+					if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+						if(serviceWorkerController==null) {
+							serviceWorkerController = ServiceWorkerController.getInstance();
+							serviceWorkerController.setServiceWorkerClient(new ServiceWorkerClient(){
+								//@Nullable
+								@Override
+								public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+									return super.shouldInterceptRequest(request);
+								}
+							});
+						}
+					}
+
 					boolean logging=extendedLogsFlag;
 					//if(uri.toString().indexOf("busy-signal.mp3")>=0 || extendedLogsFlag) {
 					//if(uri.toString().indexOf(".mp3")>=0 || extendedLogsFlag) {
@@ -1562,23 +1578,22 @@ public class WebCallService extends Service {
 						if(webviewCookies!=null) {
 							//Log.d(TAG,"intercept con.setRequestProperty(webviewCookies)="+webviewCookies);
 							requestHeaders.put("Cookie", webviewCookies);
-							storePrefsString("cookies", webviewCookies);
+							//storePrefsString("cookies", webviewCookies);
 						} else {
-							String newWebviewCookies = prefs.getString("cookies", "");
-							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)="+newWebviewCookies);
-							requestHeaders.put("Cookie", newWebviewCookies);
+							webviewCookies = prefs.getString("cookies", "");
+							//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)="+webviewCookies);
+							requestHeaders.put("Cookie", webviewCookies);
 						}
 
 						if(logging) {
 							for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
-								Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue());
+								Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+uri.toString());
 							}
 						}
 
-						Headers headerbuild = Headers.of(requestHeaders);
-						builder.headers(headerbuild);
-
+						builder.headers(Headers.of(requestHeaders));
 						Request requestOK = builder.build();
+
 						Response responseOK = client.newCall(requestOK).execute();
 
 						int status = responseOK.code();
@@ -1591,7 +1606,7 @@ public class WebCallService extends Service {
 							if(logging) {
 								Log.d(TAG,"intercept "+uri.toString()+" "+status+" ("+ contentType+ ") "+
 										"("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
-								Set<String> headerNamesSet = responseHeadersOK.names();
+								//Set<String> headerNamesSet = responseHeadersOK.names();
 								//for(String name : headerNamesSet) {
 								//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
 								//}
