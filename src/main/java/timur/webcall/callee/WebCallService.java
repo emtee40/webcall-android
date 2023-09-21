@@ -5361,12 +5361,12 @@ public class WebCallService extends Service {
 
 		String dispMsg = message;
 		if(dispMsg.equals(readyToReceiveCallsString)) {
-			dispMsg = connectedToServerString; // "Connected"
+			dispMsg = connectedToServerString; // "Connected to WebCall server"
 		}
 
-		if(!dispMsg.equals("")) {
-			dispMsg = "WebCall Server: "+dispMsg;
-		}
+//		if(!dispMsg.equals("")) {
+//			dispMsg = "WebCall Server: "+dispMsg;
+//		}
 
 		Log.d(TAG,"callInProgressNotif title="+title+" dispMsg="+dispMsg);
 
