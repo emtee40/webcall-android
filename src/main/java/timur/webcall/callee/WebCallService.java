@@ -1429,7 +1429,9 @@ public class WebCallService extends Service {
 					// however, if we do proceed here, wsOpen -> connectHost(wss://...) will fail
 					//   with onError ex javax.net.ssl.SSLHandshakeException
 					if(insecureTlsFlag) {
-						Log.d(TAG, "onReceivedSslError (proceed) "+error);
+						if(extendedLogsFlag) {
+							Log.d(TAG, "onReceivedSslError (proceed) "+error);
+						}
 						handler.proceed();
 					} else {
 						// error can not be ignored!
@@ -3070,6 +3072,7 @@ public class WebCallService extends Service {
 			postStatus("state", "disconnected");
 
 			autoPickup = false;
+			calleeIsConnectedFlag = false;
 
 			if(reconnectBusy) {
 				Log.d(TAG,"onClose skip busy (code="+code+" "+reason+")");
