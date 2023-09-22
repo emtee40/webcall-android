@@ -2702,22 +2702,32 @@ public class WebCallService extends Service {
 		public boolean isActivityInteractive() {
 			// despite it's name: this function returns true if webview can run JS unconstrained
 			if(powerManager.isDeviceIdleMode()) {
-				Log.d(TAG,"isActivityInteractive false (DeviceIdleMode)");
+				if(extendedLogsFlag) {
+					Log.d(TAG,"isActivityInteractive false (DeviceIdleMode)");
+				}
 				return false;
 			}
 			if(!activityVisible) {
-				Log.d(TAG,"isActivityInteractive false (!activityVisible)");
+				if(extendedLogsFlag) {
+					Log.d(TAG,"isActivityInteractive false (!activityVisible)");
+				}
 				return false;
 			}
 			if(myWebView==null) {
-				Log.d(TAG,"isActivityInteractive false (myWebView==null)");
+				if(extendedLogsFlag) {
+					Log.d(TAG,"isActivityInteractive false (myWebView==null)");
+				}
 				return false;
 			}
 			if(!webviewMainPageLoaded) {
-				Log.d(TAG,"isActivityInteractive false (!webviewMainPageLoaded)");
+				if(extendedLogsFlag) {
+					Log.d(TAG,"isActivityInteractive false (!webviewMainPageLoaded)");
+				}
 				return false;
 			}
-			//Log.d(TAG,"isActivityInteractive true");
+			if(extendedLogsFlag) {
+				Log.d(TAG,"isActivityInteractive true");
+			}
 			return true;
 		}
 
