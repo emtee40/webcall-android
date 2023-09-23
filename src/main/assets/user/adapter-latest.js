@@ -1,0 +1,1 @@
+../callee/adapter-latest.js

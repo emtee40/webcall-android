@@ -63,6 +63,11 @@ android {
 		abortOnError false
 		disable 'ObsoleteLintCustomCheck'
 	}
+	android {
+		aaptOptions {
+		    noCompress "js"
+		}
+	}
 }
 buildscript {
 	repositories {
