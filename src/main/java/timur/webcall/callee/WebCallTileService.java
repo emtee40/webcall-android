@@ -273,9 +273,9 @@ public class WebCallTileService extends TileService {
 	private void bindWebCallService(boolean forClick) {
 		bindForClick = forClick;
 		Intent serviceIntent = new Intent(this, WebCallService.class);
-		Log.d(TAG,"bindWebCallService alive="+WebCallService.serviceAlive+" clients="+WebCallService.boundServiceClients);
-		if(WebCallService.serviceAlive) {
-			Log.d(TAG,"bindWebCallService serviceAlive");
+		Log.d(TAG,"bindWebCallService destr="+WebCallService.serviceDestroyed+" cli="+WebCallService.boundServiceClients);
+		if(!WebCallService.serviceDestroyed) {
+			Log.d(TAG,"bindWebCallService service alive");
 		} else {
 			Log.d(TAG,"bindWebCallService must be loaded");
 			// no extra: quick auto-connect
