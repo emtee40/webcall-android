@@ -1523,18 +1523,17 @@ public class WebCallService extends Service {
 
 				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 				@Override
-				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-					final Uri uri = request.getUrl();
+				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest wvRequest) {
+					final Uri wvRequestUri = wvRequest.getUrl();
 
-					final String path = uri.getPath();
+					final String path = wvRequestUri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
 						if(extendedLogsFlag) {
-							Log.d(TAG,"intercept skip "+uri.toString());
+							Log.d(TAG,"intercept skip "+wvRequestUri);
 						}
 						return null;
 					}
 
-					Log.d(TAG,"intercept "+request.getMethod()+" ("+uri+") curUrl="+currentUrl+" ("+webcallCookie+")");
 /*
 					if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
 						if(serviceWorkerController==null) {
@@ -1544,7 +1543,7 @@ public class WebCallService extends Service {
 								@Override
 								public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
 									if(extendedLogsFlag) {
-										Log.d(TAG,"worker shouldInterceptRequest "+request.getUrl());
+										Log.d(TAG,"worker shouldInterceptRequest "+wvRequest.getUrl());
 									}
 									return super.shouldInterceptRequest(request);
 								}
@@ -1601,61 +1600,109 @@ public class WebCallService extends Service {
 							okClient = new OkHttpClient();
 						}
 
-						Request.Builder requestBuilder = new Request.Builder();
-						requestBuilder.url(uri.toString());
+						String reqUrl = wvRequestUri.toString();
+						String wvRequestMethod = wvRequest.getMethod();
+						Request.Builder requestBuilder;
+						Response responseOK;
+						int status;
+						boolean had304before = false;
+						Map<String,String> requestHeaders = wvRequest.getRequestHeaders();
 
-						if(request.getMethod().equals("POST")) {
-							if(postData!=null) {
-								//Log.d(TAG,"intercept ("+request.getMethod()+") ("+postData+")...");
-								Log.d(TAG,"intercept ("+request.getMethod()+") send postData "+postData.length());
-								RequestBody body = RequestBody.create(postData.getBytes(),MediaType.get("text/plain"));
-								requestBuilder.post(body);
-							} else {
-								Log.d(TAG,"# intercept ("+request.getMethod()+") no postData");
+						do {
+							Log.d(TAG,"intercept "+wvRequestMethod+" ("+reqUrl+")"+
+									" curUrl="+currentUrl+" ("+webcallCookie+")");
+							requestBuilder = new Request.Builder();
+							requestBuilder.url(reqUrl);
+
+							if(wvRequestMethod.equals("POST")) {
+								if(postData!=null) {
+									//Log.d(TAG,"intercept ("+wvRequestMethod+") ("+postData+")...");
+									Log.d(TAG,"intercept ("+wvRequestMethod+") send postData "+postData.length());
+									RequestBody body =
+										RequestBody.create(postData.getBytes(),MediaType.get("text/plain"));
+									requestBuilder.post(body);
+								} else {
+									Log.d(TAG,"# intercept ("+wvRequestMethod+") no postData");
+								}
 							}
-						} else {
-							//Log.d(TAG,"intercept ("+request.getMethod()+")");
-						}
 
-						Map<String,String> requestHeaders = request.getRequestHeaders();
-						requestHeaders.put("X-WcVer", BuildConfig.VERSION_NAME);
-						requestHeaders.put("X-WvVer", getWebviewVersion());
+							requestHeaders.put("X-WcVer", BuildConfig.VERSION_NAME);
+							requestHeaders.put("X-WvVer", getWebviewVersion());
+// preventing 304 in the 1st place
+							requestHeaders.remove("If-Modified-Since");
+							requestHeaders.remove("If-None-Match");
 
-						if(myWebView!=null) {
-							CookieManager.getInstance().setAcceptCookie(true);
-							if(webcallCookie==null || webcallCookie=="") {
-								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
-								webcallCookie = CookieManager.getInstance().getCookie(currentUrl);
-								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webcallCookie);
+							if(myWebView!=null) {
+								CookieManager.getInstance().setAcceptCookie(true);
+								if(webcallCookie==null || webcallCookie=="") {
+									//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
+									webcallCookie = CookieManager.getInstance().getCookie(currentUrl);
+									//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webcallCookie);
+								}
 							}
-						}
-						if(webcallCookie!=null && webcallCookie!="") {
-							//Log.d(TAG,"intercept requestHeaders.put(cookie)=="+webcallCookie);
-							requestHeaders.put("Cookie", webcallCookie);
-						} else {
-							webcallCookie = prefs.getString("cookies", "");
 							if(webcallCookie!=null && webcallCookie!="") {
-								//Log.d(TAG,"intercept requestHeaders.put(cookie)="+webcallCookie);
+								//Log.d(TAG,"intercept requestHeaders.put(cookie)=="+webcallCookie);
 								requestHeaders.put("Cookie", webcallCookie);
 							} else {
-								Log.d(TAG,"! intercept no cookie "+uri.toString());
+								webcallCookie = prefs.getString("cookies", "");
+								if(webcallCookie!=null && webcallCookie!="") {
+									//Log.d(TAG,"intercept requestHeaders.put(cookie)="+webcallCookie);
+									requestHeaders.put("Cookie", webcallCookie);
+								} else {
+									Log.d(TAG,"! intercept no cookie "+reqUrl);
+								}
+							}
+
+							if(extendedLogsFlag || had304before) {
+								// show all request headers
+								for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
+									Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+reqUrl);
+								}
+							}
+
+							requestBuilder.headers(Headers.of(requestHeaders));
+							Request requestOK = requestBuilder.build();
+
+							// now send the request
+							responseOK = okClient.newCall(requestOK).execute();
+
+							status = responseOK.code();
+							if(status>=300 && status<400) {
+// webview has the requested content in its cache
+// it has sent a If-Modified-Since header to the server and the server is responding with 304
+// this means the content has not been modified
+// but we can't tell webview this
+
+								if(had304before) {
+									// fatal
+									Log.d(TAG,"# intercept "+status+" had304before, no reloop url="+reqUrl);
+									break;
+								}
+
+								// show all request headers
+								for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
+									Log.d(TAG,"reqHdr2: "+entry.getKey() + "/" + entry.getValue()+" "+reqUrl);
+								}
+								if(reqUrl.indexOf("?")>=0) {
+									reqUrl += "&__=" + (new Date().getTime());
+								} else {
+									reqUrl += "?__=" + (new Date().getTime());
+								}
+								requestHeaders.remove("If-Modified-Since");
+								requestHeaders.remove("If-None-Match");
+								Log.d(TAG,"! intercept "+status+" reloop url="+reqUrl);
+								had304before = true;
+							}
+						}
+						while(status>=300 && status<400);
+
+						if(status>=300 && status<400) {
+							if(had304before) {
+								// fatal
+								return null;
 							}
 						}
 
-						if(extendedLogsFlag) {
-							// show all request headers
-							//for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
-							//	Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+uri.toString());
-							//}
-						}
-
-						requestBuilder.headers(Headers.of(requestHeaders));
-						Request requestOK = requestBuilder.build();
-
-						// now send the request
-						Response responseOK = okClient.newCall(requestOK).execute();
-
-						int status = responseOK.code();
 						String statusMsg = responseOK.message();
 						if(statusMsg==null || statusMsg=="") {
 							statusMsg = "OK";
@@ -1685,7 +1732,7 @@ public class WebCallService extends Service {
 
 						if(extendedLogsFlag) {
 							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
-									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + uri);
+									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + reqUrl);
 							//Set<String> headerNamesSet = responseHeadersOK.names();
 							//for(String name : headerNamesSet) {
 							//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
@@ -1702,7 +1749,7 @@ public class WebCallService extends Service {
 							// the first list entry seems to contain the complete balue
 							String value = entry.getValue().get(0);
 							if(extendedLogsFlag) {
-								Log.d(TAG,"respHdr: "+key + " (" + value +") "+uri.toString());
+								Log.d(TAG,"respHdr: "+key + " (" + value +") "+reqUrl);
 							}
 							if(key!=null && (key.equals("Set-Cookie") || key.equals("set-cookie"))) {
 								if(value!="") {
@@ -1720,6 +1767,10 @@ public class WebCallService extends Service {
 							responseHeaders.put(key,value);
 						}
 						response.setResponseHeaders(responseHeaders);
+
+/* this doesn't work
+   we also must prevent fall through with return null
+   bc this would cause a fetch without x-wcver set (causing the wrong file to me fetched potentially)
 
 						if(status<300 || status>=400) {
 							response.setStatusCodeAndReasonPhrase(status,statusMsg);
@@ -1741,15 +1792,18 @@ public class WebCallService extends Service {
 											Log.d(TAG,"# intercept reflect mReasonPhrase not found");
 										}
 									} catch(Exception ex2) {
-										Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex2);
+										Log.d(TAG, "# intercept "+url+" Exception="+ex2);
 									}
 								} else {
 									Log.d(TAG,"# intercept reflect mStatusCode not found");
 								}
 							} catch(Exception ex) {
-								Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
+								Log.d(TAG, "# intercept "+url.toString()+" Exception="+ex);
 							}
 						}
+*/
+
+						response.setStatusCodeAndReasonPhrase(status,statusMsg);
 						//responseBodyOK.close();
 						//responseOK.close();
 						return response;
@@ -1783,13 +1837,13 @@ public class WebCallService extends Service {
 						}
 
 						HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
-						con.setRequestMethod(request.getMethod());
+						con.setRequestMethod(wvRequestMethod);
 						con.setConnectTimeout(10000);
 						con.setReadTimeout(10000);
 						con.setRequestProperty("X-WcVer", BuildConfig.VERSION_NAME);
 						con.setRequestProperty("X-WvVer", getWebviewVersion());
 
-						Map<String,String> headers = request.getRequestHeaders();
+						Map<String,String> headers = wvRequest.getRequestHeaders();
 						for(Map.Entry<String, String> entry : headers.entrySet()) {
 							if(extendedLogsFlag) { Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue()); }
 							con.setRequestProperty(entry.getKey(), entry.getValue());
@@ -1827,7 +1881,7 @@ public class WebCallService extends Service {
 							con.setRequestProperty("Cookie", webcallCookie);
 						}
 
-						if(request.getMethod()!=null && request.getMethod().equals("POST") && postData!=null) {
+						if(wvRequestMethod!=null && wvRequestMethod.equals("POST") && postData!=null) {
 							if(extendedLogsFlag) { Log.d(TAG,"intercept setDoOutput "+postData); }
 							con.setDoOutput(true);
 							DataOutputStream wr = new DataOutputStream(con.getOutputStream());
@@ -1889,7 +1943,7 @@ public class WebCallService extends Service {
 //						}
 */
 					} catch(Exception ex) {
-						Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
+						Log.d(TAG, "# intercept "+wvRequestUri+" Exception="+ex);
 					}
 					//return null to tell WebView we failed to fetch it WebView should try again.
 					return null;
