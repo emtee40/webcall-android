@@ -1312,6 +1312,10 @@ public class WebCallService extends Service {
 			webSettings.setMediaPlaybackRequiresUserGesture(false);
 			webSettings.setDomStorageEnabled(true);
 			webSettings.setAllowContentAccess(true);
+			webSettings.setAppCacheEnabled(true);
+			String appCachePath = getCacheDir().getAbsolutePath();
+			webSettings.setAppCachePath(appCachePath);
+			webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
 			//Log.d(TAG, "done webSettings "+webSettings.getSaveFormData());
 
 			myWebView.setDownloadListener(new DownloadListener() {
@@ -1391,9 +1395,9 @@ public class WebCallService extends Service {
 					if(errorCode==ERROR_HOST_LOOKUP) {
 						Log.d(TAG, "# onReceivedError HOST_LOOKUP "+description+" "+failingUrl);
 						statusMessage("Connection error: Host lookup",-1,true,false);
-					} else if(errorCode==ERROR_UNKNOWN) {
-						Log.d(TAG, "# onReceivedError ERROR_UNKNOWN "+description+" "+failingUrl);
-						//statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
+//					} else if(errorCode==ERROR_UNKNOWN) {
+//						Log.d(TAG, "# onReceivedError ERROR_UNKNOWN "+description+" "+failingUrl);
+//						//statusMessage("Connection error: "+description+" "+failingUrl,-1,true,false);
 					} else {
 						Log.d(TAG, "# onReceivedError "+errorCode+" "+description+" "+failingUrl);
 // TODO errorCode == "net::ERR_FAILED" is not reliable (at least not when we do jntercept)
@@ -1519,27 +1523,18 @@ public class WebCallService extends Service {
 				//@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 				@Override
 				public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-					boolean logging = extendedLogsFlag;
-/*
-					if(insecureTlsFlag) {
-						if(logging) {
-							Log.d(TAG,"intercept insecureTlsFlag skip "+uri.toString());
-						}
-						return null;
-					}
-*/
 					final Uri uri = request.getUrl();
-					//Log.i(TAG, "handleUri " + uri);
-					//final String host = uri.getHost();
-					//final String scheme = uri.getScheme();
+
 					final String path = uri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
-						if(logging) {
+						if(extendedLogsFlag) {
 							Log.d(TAG,"intercept skip "+uri.toString());
 						}
 						return null;
 					}
 
+					Log.d(TAG,"intercept "+request.getMethod()+" ("+uri+") curUrl="+currentUrl);
+/*
 					if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
 						if(serviceWorkerController==null) {
 							serviceWorkerController = ServiceWorkerController.getInstance();
@@ -1547,7 +1542,7 @@ public class WebCallService extends Service {
 								//@Nullable
 								@Override
 								public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
-									if(logging) {
+									if(extendedLogsFlag) {
 										Log.d(TAG,"worker shouldInterceptRequest "+request.getUrl());
 									}
 									return super.shouldInterceptRequest(request);
@@ -1555,16 +1550,8 @@ public class WebCallService extends Service {
 							});
 						}
 					}
-
-					//if(uri.toString().indexOf("busy-signal.mp3")>=0 || extendedLogsFlag) {
-					//if(uri.toString().indexOf(".mp3")>=0 || extendedLogsFlag) {
-					//	logging=true;
-					//}
+*/
 					try {
-						//if(logging) {
-							Log.d(TAG,"intercept "+request.getMethod()+" ("+uri+") curUrl="+currentUrl);
-						//}
-
 						OkHttpClient okClient;
 
 						if(insecureTlsFlag) {
@@ -1572,7 +1559,7 @@ public class WebCallService extends Service {
 							X509TrustManager trustAllCerts = new X509TrustManager() {
 								@Override
 								public X509Certificate[] getAcceptedIssuers() {
-									if(logging) {
+									if(extendedLogsFlag) {
 										//Log.d(TAG,"intercept getAcceptedIssuers()");
 									}
 									return new java.security.cert.X509Certificate[]{};
@@ -1580,14 +1567,14 @@ public class WebCallService extends Service {
 								@Override
 								public void checkClientTrusted(X509Certificate[] chain, String authType)
 										throws CertificateException {
-									if(logging) {
+									if(extendedLogsFlag) {
 										//Log.d(TAG,"intercept checkClientTrusted() "+authType);
 									}
 								}
 								@Override
 								public void checkServerTrusted(X509Certificate[] chain, String authType)
 										throws CertificateException {
-									if(logging) {
+									if(extendedLogsFlag) {
 										//Log.d(TAG,"intercept checkServerTrusted() "+authType);
 									}
 								}
@@ -1602,7 +1589,7 @@ public class WebCallService extends Service {
 								public boolean verify(String hostname, SSLSession session) {
 									//HostnameVerifier hv = new org.apache.http.conn.ssl.StrictHostnameVerifier();
 									//boolean ret = hv.verify("192.168.0.161", session);
-									if(logging) {
+									if(extendedLogsFlag) {
 										//Log.d(TAG,"intercept HostnameVerifier accept "+hostname);
 									}
 									return true;
@@ -1635,28 +1622,27 @@ public class WebCallService extends Service {
 
 						if(myWebView!=null) {
 							CookieManager.getInstance().setAcceptCookie(true);
-							if(webcallCookie==null) {
+							if(webcallCookie==null || webcallCookie=="") {
 								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
 								webcallCookie = CookieManager.getInstance().getCookie(currentUrl);
 								//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")="+webcallCookie);
 							}
 						}
 						if(webcallCookie!=null && webcallCookie!="") {
-							//Log.d(TAG,"intercept con.setRequestProperty(webcallCookie)="+webcallCookie);
+							//Log.d(TAG,"intercept requestHeaders.put(cookie)=="+webcallCookie);
 							requestHeaders.put("Cookie", webcallCookie);
-							//storePrefsString("cookies", webcallCookie);
 						} else {
 							webcallCookie = prefs.getString("cookies", "");
 							if(webcallCookie!=null && webcallCookie!="") {
-								//Log.d(TAG,"intercept con.setRequestProperty(prefs:cookies)="+webcallCookie);
+								//Log.d(TAG,"intercept requestHeaders.put(cookie)="+webcallCookie);
 								requestHeaders.put("Cookie", webcallCookie);
 							} else {
 								Log.d(TAG,"! intercept no cookie "+uri.toString());
 							}
 						}
 
-						if(logging) {
-							// show request headers
+						if(extendedLogsFlag) {
+							// show all request headers
 							//for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
 							//	Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+uri.toString());
 							//}
@@ -1674,77 +1660,88 @@ public class WebCallService extends Service {
 							statusMsg = "OK";
 						}
 
-						// statusCode can't be in the [300, 399] range
-						if(status<300 || status>=400) {
-							//ResponseBody responseBodyOK = responseOK.body();
-							Headers responseHeadersOK = responseOK.headers();
+						//ResponseBody responseBodyOK = responseOK.body();
+						Headers responseHeadersOK = responseOK.headers();
 
-							String contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
-							//String contentType = responseBodyOK.contentType().toString();
-							String mime = contentType;
-							if(mime!=null) {
-								int idxSemicolon = mime.indexOf(";");
-								if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
-							}
-
-							String encoding = responseHeadersOK.get("content-encoding");
-							if(encoding==null) {
-								encoding = "utf-8";
-							} else if(contentType!=null &&
-									//(responseBodyOK.contentType().type().equals("text") ||
-									(contentType.startsWith("text") ||
-									 contentType.equals("image/svg+xml"))) {
-								encoding = "utf-8";
-							}
-
-
-							if(logging) {
-								Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
-										"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + uri);
-								//Set<String> headerNamesSet = responseHeadersOK.names();
-								//for(String name : headerNamesSet) {
-								//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
-								//}
-							}
-
-							WebResourceResponse response =
-								new WebResourceResponse(mime, encoding, responseOK.body().byteStream());
-							Map<String,String> responseHeaders = new HashMap<String,String>();
-							Map<String,List<String>> myHeaders = responseHeadersOK.toMultimap();
-
-							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
-								String key = entry.getKey();
-								// the first list entry seems to contain the complete balue
-								String value = entry.getValue().get(0);
-								if(logging) {
-									Log.d(TAG,"respHdr: "+key + " (" + value +") "+uri.toString());
-								}
-								if(key!=null && (key.equals("Set-Cookie") || key.equals("set-cookie"))) {
-									if(value!="") {
-										webcallCookie = value;
-										Log.d(TAG,"intercept storePrefs cookie="+webcallCookie);
-										storePrefsString("cookies", webcallCookie);
-										if(myWebView!=null) {
-											Log.d(TAG,"intercept setCookie currentUrl="+currentUrl);
-											CookieManager.getInstance().setAcceptCookie(true);
-											CookieManager.getInstance().setCookie(currentUrl,webcallCookie);
-										}
-									}
-								}
-
-								responseHeaders.put(key,value);
-							}
-							response.setResponseHeaders(responseHeaders);
-							response.setStatusCodeAndReasonPhrase(status,statusMsg);
-							//responseBodyOK.close();
-							//responseOK.close();
-							return response;
+						String contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
+						//String contentType = responseBodyOK.contentType().toString();
+						String mime = contentType;
+						if(mime!=null) {
+							int idxSemicolon = mime.indexOf(";");
+							if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
 						}
 
+						String encoding = responseHeadersOK.get("content-encoding");
+						if(encoding==null) {
+							encoding = "utf-8";
+						} else if(contentType!=null &&
+								//(responseBodyOK.contentType().type().equals("text") ||
+								(contentType.startsWith("text") ||
+								 contentType.equals("image/svg+xml"))) {
+							encoding = "utf-8";
+						}
+
+
+						if(extendedLogsFlag) {
+							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
+									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + uri);
+							//Set<String> headerNamesSet = responseHeadersOK.names();
+							//for(String name : headerNamesSet) {
+							//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
+							//}
+						}
+
+						WebResourceResponse response =
+							new WebResourceResponse(mime, encoding, responseOK.body().byteStream());
+						Map<String,String> responseHeaders = new HashMap<String,String>();
+						Map<String,List<String>> myHeaders = responseHeadersOK.toMultimap();
+
+						for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
+							String key = entry.getKey();
+							// the first list entry seems to contain the complete balue
+							String value = entry.getValue().get(0);
+							if(extendedLogsFlag) {
+								Log.d(TAG,"respHdr: "+key + " (" + value +") "+uri.toString());
+							}
+							if(key!=null && (key.equals("Set-Cookie") || key.equals("set-cookie"))) {
+								if(value!="") {
+									webcallCookie = value;
+									Log.d(TAG,"intercept storePrefs cookie="+webcallCookie);
+									storePrefsString("cookies", webcallCookie);
+									if(myWebView!=null) {
+										Log.d(TAG,"intercept setCookie currentUrl="+currentUrl);
+										CookieManager.getInstance().setAcceptCookie(true);
+										CookieManager.getInstance().setCookie(currentUrl,webcallCookie);
+									}
+								}
+							}
+
+							responseHeaders.put(key,value);
+						}
+						response.setResponseHeaders(responseHeaders);
+
+						if(status<300 || status>=400) {
+							response.setStatusCodeAndReasonPhrase(status,statusMsg);
+						} else {
+							// statusCode can't be in the [300, 399] range
+							java.lang.reflect.Field f = WebResourceResponse.class.getDeclaredField("mStatusCode");
+							f.setAccessible(true);
+							f.setInt(response, status);
+							java.lang.reflect.Field f2 = WebResourceResponse.class.getDeclaredField("mReason");
+							if(f2!=null) {
+								f2.setAccessible(true);
+								f2.set(response, statusMsg);
+							}
+						}
+						//responseBodyOK.close();
+						//responseOK.close();
+						return response;
+
 /*
+						// intercept 1 using HttpsURLConnection
 						URL url = new URL(uri.toString());
 						if(insecureTlsFlag) {
-							if(logging) { Log.d(TAG,"intercept allow insecure https"); }
+							if(extendedLogsFlag) { Log.d(TAG,"intercept allow insecure https"); }
 							try {
 								TrustManager[] trustAllCerts = new TrustManager[] {
 									new X509TrustManager() {
@@ -1777,7 +1774,7 @@ public class WebCallService extends Service {
 
 						Map<String,String> headers = request.getRequestHeaders();
 						for(Map.Entry<String, String> entry : headers.entrySet()) {
-							if(logging) { Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue()); }
+							if(extendedLogsFlag) { Log.d(TAG,"rh: "+entry.getKey() + "/" + entry.getValue()); }
 							con.setRequestProperty(entry.getKey(), entry.getValue());
 						}
 
@@ -1814,7 +1811,7 @@ public class WebCallService extends Service {
 						}
 
 						if(request.getMethod()!=null && request.getMethod().equals("POST") && postData!=null) {
-							if(logging) { Log.d(TAG,"intercept setDoOutput "+postData); }
+							if(extendedLogsFlag) { Log.d(TAG,"intercept setDoOutput "+postData); }
 							con.setDoOutput(true);
 							DataOutputStream wr = new DataOutputStream(con.getOutputStream());
 							wr.writeBytes(postData);
@@ -1823,13 +1820,13 @@ public class WebCallService extends Service {
 							postData = null;
 						}
 
-						if(logging) { Log.d(TAG,"intercept con.connect()"); }
+						if(extendedLogsFlag) { Log.d(TAG,"intercept con.connect()"); }
 						con.connect();
 						int status = con.getResponseCode();
 						String statusMsg = con.getResponseMessage();
 
 						// statusCode can't be in the [300, 399] range
-						if(status<300 || status>=400) {
+//						if(status<300 || status>=400) {
 							String contentType = con.getHeaderField("content-type"); // "text/plain; charset=utf-8"
 							String encoding = con.getHeaderField("content-encoding"); // null
 							String mime = contentType;
@@ -1841,7 +1838,7 @@ public class WebCallService extends Service {
 							// (text/javascript) (null) [text/javascript; charset=utf-8]
 							//if(encoding==null && mime.startsWith("text/") encoding="utf-8";
 
-							if(logging) {
+							if(extendedLogsFlag) {
 								Log.d(TAG,"intercept "+uri.toString()+" "+status+" ("+ mime+ ") "+
 										"("+ encoding+") ["+contentType+"] repMsg="+statusMsg);
 							}
@@ -1851,11 +1848,11 @@ public class WebCallService extends Service {
 							Map<String,List<String>> myHeaders = con.getHeaderFields();
 							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
 								String key = entry.getKey();
-								String value = ""+entry.getValue();
-								if(value.startsWith("[") && value.endsWith("]")) {
-									value = value.substring(1,value.length()-1);
-								}
-								if(logging) { Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString()); }
+								String value = ""+entry.getValue().get(0);
+								//if(value.startsWith("[") && value.endsWith("]")) {
+								//	value = value.substring(1,value.length()-1);
+								//}
+								if(extendedLogsFlag) { Log.d(TAG,"map: "+key + "/" + value+" "+uri.toString()); }
 								if(key!=null && key.equals("Set-Cookie")) {
 									webcallCookie = value;
 									Log.d(TAG,"intercept storePrefs cookie="+webcallCookie);
@@ -1872,9 +1869,7 @@ public class WebCallService extends Service {
 							response.setResponseHeaders(responseHeaders);
 							response.setStatusCodeAndReasonPhrase(status,statusMsg);
 							return response;
-						} else {
-							if(logging) { Log.d(TAG,"intercept skip http status="+status+" '"+statusMsg+"' "+uri); }
-						}
+//						}
 */
 					} catch(Exception ex) {
 						Log.d(TAG, "# intercept "+uri.toString()+" Exception="+ex);
@@ -2583,7 +2578,9 @@ public class WebCallService extends Service {
 
 		@android.webkit.JavascriptInterface
 		public boolean isRinging() {
-			Log.d(TAG, "JS isRinging() "+ringFlag);
+			if(ringFlag) {
+				Log.d(TAG, "JS isRinging() "+ringFlag);
+			}
 			return ringFlag; // set by JS ringStart()
 		}
 
@@ -4138,11 +4135,20 @@ public class WebCallService extends Service {
 
 				if(!connectToServerIsWanted) {
 					Log.d(TAG,"reconnecter not wanted, abort");
+					reconnectBusy = false;
 					return;
 				}
 
 				if(calleeIsConnectedFlag) { // set by JS calleeReady()
-					Log.d(TAG,"reconnecter not needed, calleeIsConnected, abort");
+					Log.d(TAG,"! reconnecter not needed, calleeIsConnected, abort");
+					reconnectBusy = false;
+					return;
+				}
+
+// TODO tmtmtm also check if on main page
+				if(!webviewMainPageLoaded) {
+					Log.d(TAG,"! reconnecter aborted on !webviewMainPageLoaded");
+					reconnectBusy = false;
 					return;
 				}
 
@@ -4722,7 +4728,7 @@ public class WebCallService extends Service {
 					// service reconnect: set auto=true telling server this is not a manual login
 					wsAddr += "&auto=true";
 				}
-				Log.d(TAG,"connectHost create new WsClient");
+				Log.d(TAG,"connectHost create new WsClient "+wsAddr);
 				wsClient = new WsClient(new URI(wsAddr));
 			}
 			if(wsClient==null) {
