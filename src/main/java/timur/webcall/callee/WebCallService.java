@@ -149,6 +149,7 @@ import java.io.IOException;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.io.DataOutputStream;
+import java.io.BufferedInputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.lang.reflect.Method;
@@ -1313,9 +1314,9 @@ public class WebCallService extends Service {
 
 			webSettings.setJavaScriptEnabled(true);
 			webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
-			webSettings.setAllowFileAccessFromFileURLs(true);
-			webSettings.setAllowFileAccess(true);
-			webSettings.setAllowUniversalAccessFromFileURLs(true);
+//			webSettings.setAllowFileAccessFromFileURLs(true);
+//			webSettings.setAllowFileAccess(true);
+//			webSettings.setAllowUniversalAccessFromFileURLs(true);
 			webSettings.setMediaPlaybackRequiresUserGesture(false);
 			webSettings.setDomStorageEnabled(true);
 			webSettings.setAllowContentAccess(true);
@@ -1619,11 +1620,10 @@ public class WebCallService extends Service {
 						Map<String,List<String>> myHeaders = null;
 						WebResourceResponse response = null;
 
-						// injecting local assets dtmf-dial.mp3 busy-signal.mp3 and adapter-latest.js
-						// into http WebResourceResponse
+						// injecting local assets into http WebResourceResponse
 						if(path.indexOf("/user/dtmf-dial.mp3")>=0 ||
-						   path.indexOf("/user/busy-signal.mp3")>=0 ||
-						   path.indexOf("/callee/1980-phone-ringing.mp3")>=0 ||
+						   path.indexOf("/callee/busy-signal.mp3")>=0 ||
+						   path.indexOf("/callee/1980-phone-ringing.mp3")>=0 ||		// TODO internally this is an OGG
 						   path.indexOf("/callee/adapter-latest.js")>=0 ||
 						   path.indexOf("/user/adapter-latest.js")>=0 ||
 						   path.indexOf("/callee/adapter-latest.js")>=0 ||
@@ -1666,14 +1666,15 @@ public class WebCallService extends Service {
 							}
 
 							AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
-							response = new WebResourceResponse(mime, encoding, fileDescriptor.createInputStream());
+							response = new WebResourceResponse(mime, encoding,
+								new BufferedInputStream(fileDescriptor.createInputStream()));
 
 							myHeaders = new HashMap<String,List<String>>();
 							myHeaders.put("content-length", Arrays.asList(""+fileDescriptor.getLength()));
 							myHeaders.put("content-type", Arrays.asList(mime));
 							myHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
-							myHeaders.put("date", Arrays.asList("Sat, 23 Sep 2023 19:32:59 GMT"));	        // TODO
-							myHeaders.put("last-modified", Arrays.asList("Sat, 23 Sep 2023 05:41:50 GMT")); // TODO
+							myHeaders.put("date", Arrays.asList("Sat, 24 Sep 2023 17:32:59 GMT"));	        // TODO
+							myHeaders.put("last-modified", Arrays.asList("Sat, 24 Sep 2023 17:31:50 GMT")); // TODO
 							status = 200;
 							statusMsg = "OK";
 						}
