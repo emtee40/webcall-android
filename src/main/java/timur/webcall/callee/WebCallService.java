@@ -1314,9 +1314,12 @@ public class WebCallService extends Service {
 
 			webSettings.setJavaScriptEnabled(true);
 			webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
-//			webSettings.setAllowFileAccessFromFileURLs(true);
-//			webSettings.setAllowFileAccess(true);
-//			webSettings.setAllowUniversalAccessFromFileURLs(true);
+
+			// TODO one of these is needed for webcall.js from assets folder
+			webSettings.setAllowFileAccessFromFileURLs(true);
+			webSettings.setAllowFileAccess(true);
+			webSettings.setAllowUniversalAccessFromFileURLs(true);
+
 			webSettings.setMediaPlaybackRequiresUserGesture(false);
 			webSettings.setDomStorageEnabled(true);
 			webSettings.setAllowContentAccess(true);
@@ -1542,6 +1545,14 @@ public class WebCallService extends Service {
 						//}
 						return null;
 					}
+/*
+					if(path.indexOf("/rtcsig/online")>=0) {
+						//if(logFlag) {
+							Log.d(TAG,"intercept skip "+wvRequestUri);
+						//}
+						return null;
+					}
+*/
 
 /*
 					if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
@@ -4279,19 +4290,19 @@ public class WebCallService extends Service {
 				}
 
 				if(!connectToServerIsWanted) {
-					Log.d(TAG,"reconnecter not wanted, abort, wsClient="+(wsClient!=null));
+					Log.d(TAG,"reconnecter not wanted, stopped, wsClient="+(wsClient!=null));
 					reconnectBusy = false;
 					return;
 				}
 
 				if(calleeIsConnectedFlag) { // set by JS calleeReady()
-					Log.d(TAG,"! reconnecter not needed, calleeIsConnected, abort, wsClient="+(wsClient!=null));
+					Log.d(TAG,"! reconnecter not needed, calleeIsConnected, stopped, wsClient="+(wsClient!=null));
 					reconnectBusy = false;
 					return;
 				}
 
 				if(!webviewMainPageLoaded) {
-					Log.d(TAG,"! reconnecter aborted on !webviewMainPageLoaded wsClient="+(wsClient!=null));
+					Log.d(TAG,"! reconnecter stopped on !webviewMainPageLoaded wsClient="+(wsClient!=null));
 					reconnectBusy = false;
 					return;
 				}
