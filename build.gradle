@@ -66,6 +66,7 @@ android {
 	android {
 		aaptOptions {
 		    noCompress "js"
+		    noCompress "svg"
 		}
 	}
 }

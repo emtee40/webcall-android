@@ -1536,9 +1536,9 @@ public class WebCallService extends Service {
 
 					final String path = wvRequestUri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
-						if(logFlag) {
+						//if(logFlag) {
 							Log.d(TAG,"intercept skip "+wvRequestUri);
-						}
+						//}
 						return null;
 					}
 
@@ -1623,8 +1623,19 @@ public class WebCallService extends Service {
 						// into http WebResourceResponse
 						if(path.indexOf("/user/dtmf-dial.mp3")>=0 ||
 						   path.indexOf("/user/busy-signal.mp3")>=0 ||
+						   path.indexOf("/callee/1980-phone-ringing.mp3")>=0 ||
+						   path.indexOf("/callee/adapter-latest.js")>=0 ||
 						   path.indexOf("/user/adapter-latest.js")>=0 ||
-						   path.indexOf("/callee/adapter-latest.js")>=0) {
+						   path.indexOf("/callee/adapter-latest.js")>=0 ||
+						   path.indexOf("/callee/phone.svg")>=0 ||
+						   path.indexOf("/callee/menu.svg")>=0 ||
+						   path.indexOf("/callee/camera.svg")>=0 ||
+						   path.indexOf("/callee/contacts.svg")>=0 ||
+						   path.indexOf("/callee/dialpad.svg")>=0 ||
+						   path.indexOf("/callee/checkboxes.svg")>=0 ||
+						   path.indexOf("/user/camera.svg")>=0 ||
+						   path.indexOf("/user/menu.svg")>=0 ||
+						   path.indexOf("/user/phone.svg")>=0) {
 
 							//logFlag = true;
 							int idx = path.indexOf("/user/");
@@ -1646,6 +1657,10 @@ public class WebCallService extends Service {
 								mime = contentType;
 							} else if(filename.endsWith(".js")) {
 								contentType = "text/javascript";
+								mime = contentType;
+								encoding = "utf-8";
+							} else if(filename.endsWith(".svg")) {
+								contentType = "image/svg+xml";
 								mime = contentType;
 								encoding = "utf-8";
 							}

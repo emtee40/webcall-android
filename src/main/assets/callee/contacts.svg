@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg x="0" y="0" viewBox="100 72 300 300" version="1.1" xmlns="http://www.w3.org/2000/svg">
+	<g id="subject" transform="scale(1,0.95)">
+		<path id="body" fill="#eee"
+		 	d="M250,261.4c-57,0-116.5,27.8-116.5,65.3v17c0,19.4,15.9,34.1,35.5,34.1h164.7
+			c19.6,0,35.5-14.7,35.5-34.1v-17C369.3,289.1,307,261.4,250,261.4z"/>
+		<circle id="head" fill="#fff" cx="250" cy="176.1" r="54"/>
+	</g>
+</svg>
+
