@@ -134,6 +134,7 @@ import java.util.function.BiConsumer;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Arrays;
+import java.util.TimeZone;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.net.URI;
@@ -466,6 +467,7 @@ public class WebCallService extends Service {
 
 		// turn tile off
 		postStatus("state", "deactivated");
+		currentUrl = "";
 		serviceDestroyed = true;
 		Log.d(TAG, "onDestroy done");
 	}
@@ -1323,10 +1325,10 @@ public class WebCallService extends Service {
 			webSettings.setMediaPlaybackRequiresUserGesture(false);
 			webSettings.setDomStorageEnabled(true);
 			webSettings.setAllowContentAccess(true);
-			webSettings.setAppCacheEnabled(true);
-			String appCachePath = getCacheDir().getAbsolutePath();
-			webSettings.setAppCachePath(appCachePath);
+
 			webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+//			webSettings.setCacheMode(WebSettings.LOAD_CACHE_ONLY);
+
 //			webSettings.setSafeBrowsingWhitelist()
 			//Log.d(TAG, "done webSettings "+webSettings.getSaveFormData());
 
@@ -1628,15 +1630,19 @@ public class WebCallService extends Service {
 						String contentType = "";
 						String mime = "";
 						String encoding = null;
-						Map<String,List<String>> myHeaders = null;
+						Map<String,List<String>> myResponseHeaders = null;
 						WebResourceResponse response = null;
 
+						if(path.indexOf(".mp3")>=0 || path.indexOf(".ogg")>=0) {
+							logFlag = true;
+						}
+
 						// injecting local assets into http WebResourceResponse
-						if(path.indexOf("/user/dtmf-dial.mp3")>=0 ||
+						if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
+						   path.indexOf("/user/notification.ogg")>=0 ||
+						   path.indexOf("/user/adapter-latest.js")>=0 ||
 						   path.indexOf("/callee/busy-signal.mp3")>=0 ||
 						   path.indexOf("/callee/1980-phone-ringing.mp3")>=0 ||		// TODO internally this is an OGG
-						   path.indexOf("/callee/adapter-latest.js")>=0 ||
-						   path.indexOf("/user/adapter-latest.js")>=0 ||
 						   path.indexOf("/callee/adapter-latest.js")>=0 ||
 						   path.indexOf("/callee/phone.svg")>=0 ||
 						   path.indexOf("/callee/menu.svg")>=0 ||
@@ -1648,7 +1654,6 @@ public class WebCallService extends Service {
 						   path.indexOf("/user/menu.svg")>=0 ||
 						   path.indexOf("/user/phone.svg")>=0) {
 
-							//logFlag = true;
 							int idx = path.indexOf("/user/");
 							if(idx<0) idx = path.indexOf("/callee/");
 							String filename = path.substring(idx+1);
@@ -1660,11 +1665,12 @@ public class WebCallService extends Service {
 							if(idx>=0) {
 								filename = filename.substring(0,idx);
 							}
-							Log.d(TAG,"intercept local filename=("+filename+")" +
-								" contentSecurityPolicy="+contentSecurityPolicy);
 
 							if(filename.endsWith(".mp3")) {
 								contentType = "audio/mpeg";
+								mime = contentType;
+							} else if(filename.endsWith(".ogg")) {
+								contentType = "audio/ogg";
 								mime = contentType;
 							} else if(filename.endsWith(".js")) {
 								contentType = "text/javascript";
@@ -1679,13 +1685,31 @@ public class WebCallService extends Service {
 							AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
 							response = new WebResourceResponse(mime, encoding,
 								new BufferedInputStream(fileDescriptor.createInputStream()));
+							long contentLength = fileDescriptor.getLength();
+							Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
+//								" contentSecurityPolicy="+contentSecurityPolicy);
 
-							myHeaders = new HashMap<String,List<String>>();
-							myHeaders.put("content-length", Arrays.asList(""+fileDescriptor.getLength()));
-							myHeaders.put("content-type", Arrays.asList(mime));
-							myHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
-							myHeaders.put("date", Arrays.asList("Sat, 24 Sep 2023 17:32:59 GMT"));	        // TODO
-							myHeaders.put("last-modified", Arrays.asList("Sat, 24 Sep 2023 17:31:50 GMT")); // TODO
+							myResponseHeaders = new HashMap<String,List<String>>();
+							myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
+							myResponseHeaders.put("content-type", Arrays.asList(mime));
+							myResponseHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
+
+							DateFormat df = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+							df.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+							Date date= new Date();
+							myResponseHeaders.put("date", Arrays.asList(df.format(date)));
+
+							Date dateModified = new Date();
+							dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
+							myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
+
+							Date dateExpires = new Date();
+							dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
+							myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
+
+							// TODO set user-agent?
+
 							status = 200;
 							statusMsg = "OK";
 						}
@@ -1720,6 +1744,8 @@ public class WebCallService extends Service {
 								// preventing 304 in the 1st place:
 								requestHeaders.remove("If-Modified-Since");
 								requestHeaders.remove("If-None-Match");
+								// preventing 206 in the 1st place:
+								requestHeaders.remove("Range");
 
 								if(myWebView!=null) {
 									CookieManager.getInstance().setAcceptCookie(true);
@@ -1821,7 +1847,7 @@ public class WebCallService extends Service {
 							}
 
 							response = new WebResourceResponse(mime, encoding, responseOK.body().byteStream());
-							myHeaders = responseHeadersOK.toMultimap();
+							myResponseHeaders = responseHeadersOK.toMultimap();
 						}
 
 						if(logFlag) {
@@ -1835,7 +1861,7 @@ public class WebCallService extends Service {
 
 						/////// build response header
 						Map<String,String> responseHeaders = new HashMap<String,String>();
-						for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
+						for(Map.Entry<String, List<String>> entry : myResponseHeaders.entrySet()) {
 							String key = entry.getKey();
 							// the first list entry seems to contain the complete balue
 							String value = entry.getValue().get(0);
@@ -2013,8 +2039,8 @@ public class WebCallService extends Service {
 
 							WebResourceResponse response = new WebResourceResponse(mime, encoding, con.getInputStream());
 							Map<String,String> responseHeaders = new HashMap<String,String>();
-							Map<String,List<String>> myHeaders = con.getHeaderFields();
-							for(Map.Entry<String, List<String>> entry : myHeaders.entrySet()) {
+							Map<String,List<String>> myResponseHeaders = con.getHeaderFields();
+							for(Map.Entry<String, List<String>> entry : myResponseHeaders.entrySet()) {
 								String key = entry.getKey();
 								String value = ""+entry.getValue().get(0);
 								//if(value.startsWith("[") && value.endsWith("]")) {
@@ -3896,8 +3922,7 @@ public class WebCallService extends Service {
 			return;
 		}
 
-		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName;
-//					"&ver="+ BuildConfig.VERSION_NAME+"_"+getWebviewVersion(); // +"&re=true";
+		loginUrl = "https://"+webcalldomain+"/rtcsig/login?id="+loginUserName+"&ver="+BuildConfig.VERSION_NAME;
 		//Log.d(TAG,"setLoginUrl="+loginUrl);
 	}
 
@@ -4246,6 +4271,7 @@ public class WebCallService extends Service {
 					// we have no network: it makes no sense to try to reconnect any longer
 					// we just wait for a new-network event via networkCallback or networkStateReceiver
 					// we release keepAwakeWakeLock
+					Log.d(TAG,"reconnecter no net");
 					if(keepAwakeWakeLock!=null && keepAwakeWakeLock.isHeld()) {
 						long wakeMS = (new Date()).getTime() - keepAwakeWakeLockStartTime;
 						Log.d(TAG,"reconnecter waiting for net; keepAwakeWakeLock.release +"+wakeMS);
@@ -4301,9 +4327,17 @@ public class WebCallService extends Service {
 					return;
 				}
 
-				if(!webviewMainPageLoaded) {
-					Log.d(TAG,"! reconnecter stopped on !webviewMainPageLoaded wsClient="+(wsClient!=null));
+				if(currentUrl.equals("file:///android_asset/index.html")) {
+					Log.d(TAG,"! reconnecter stopped, user on basepage wsClient="+(wsClient!=null));
+					// we need to prevent the reconnector to start in the bg while user sits on the base page
+					// reconnector was probably started from tile
 					reconnectBusy = false;
+					connectToServerIsWanted = false;
+					if(wsClient==null) {
+						Log.d(TAG,"! reconnecter stopped, no wsClient, stop tile");
+						postStatus("state", "disconnected");
+						postStatus("state", "deactivated");
+					}
 					return;
 				}
 
@@ -4384,6 +4418,7 @@ public class WebCallService extends Service {
 							Log.d(TAG,"# reconnecter no pw cookie, abort");
 							statusMessage("No password cookie. Reconnector aborted.",-1,true,false);
 							reconnectBusy = false;
+// TODO tmtmtm turn tile off?
 						}
 					}
 					if(!reconnectBusy) {

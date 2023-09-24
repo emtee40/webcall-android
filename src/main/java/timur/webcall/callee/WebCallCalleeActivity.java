@@ -769,9 +769,11 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 					Log.d(TAG, "onServiceConnected appCachePath "+appCachePath);
 				}
 				WebSettings webSettings = myWebView.getSettings();
-				webSettings.setAppCachePath(appCachePath);
 				webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
-				webSettings.setAppCacheEnabled(true);
+//				webSettings.setAppCachePath(appCachePath);
+//				webSettings.setAppCacheEnabled(true);
+				webSettings.setJavaScriptEnabled(true);
+				webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
 				webCallServiceBinder.startWebView(myWebView);
 
 				if(dialIdIntent!=null) {
@@ -2303,9 +2305,10 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			WebSettings newWebSettings = myNewWebView.getSettings();
 			newWebSettings.setJavaScriptEnabled(true);
 			newWebSettings.setJavaScriptCanOpenWindowsAutomatically(true);
-			newWebSettings.setAllowFileAccessFromFileURLs(true);
-			newWebSettings.setAllowFileAccess(true);
-			newWebSettings.setAllowUniversalAccessFromFileURLs(true);
+			newWebSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+//			newWebSettings.setAllowFileAccessFromFileURLs(true);
+//			newWebSettings.setAllowFileAccess(true);
+//			newWebSettings.setAllowUniversalAccessFromFileURLs(true);
 			newWebSettings.setMediaPlaybackRequiresUserGesture(false);
 			newWebSettings.setDomStorageEnabled(true);
 			newWebSettings.setAllowContentAccess(true);
