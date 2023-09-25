@@ -1709,6 +1709,9 @@ public class WebCallService extends Service {
 							dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
 							myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
 
+							myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
+							myResponseHeaders.put("Content-Range",
+								Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
 							// TODO set user-agent?
 
 							status = 200;
@@ -1746,7 +1749,7 @@ public class WebCallService extends Service {
 								requestHeaders.remove("If-Modified-Since");
 								requestHeaders.remove("If-None-Match");
 								// preventing 206 in the 1st place:
-								requestHeaders.remove("Range");
+								//requestHeaders.remove("Range");
 
 								if(myWebView!=null) {
 									CookieManager.getInstance().setAcceptCookie(true);
