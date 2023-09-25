@@ -2725,8 +2725,8 @@ public class WebCallService extends Service {
 			// js code wants to open a websocket connection
 			// wsOpen() does not start reconnecter (reconnecter will be started if the connection is lost)
 			// wsOpen() does NOT call runJS("wakeGoOnline()") (does not send "init|") JS takes care of this
-			if(reconnectBusy && wsClient!=null) {
-				Log.d(TAG,"JS wsOpen reconnectBusy return existing wsClient");
+			if(/*reconnectBusy && */ wsClient!=null) {
+				Log.d(TAG,"JS wsOpen return existing wsClient");
 				connectToServerIsWanted = true;
 				storePrefsBoolean("connectWanted",true); // used in case of service crash + restart
 
@@ -2736,7 +2736,7 @@ public class WebCallService extends Service {
 				// then we will broadcast: "state", "connected"
 				return wsClient;
 			}
-			if(wsClient==null) {
+			if(wsClient==null && setWsAddr!="") {
 				Log.d(TAG,"JS wsOpen wsClient==null addr="+setWsAddr);
 				// if connectHost fails, it will send updateNotification(offlineMessage)
 				WebSocketClient wsCli = connectHost(setWsAddr,false);
