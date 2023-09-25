@@ -1640,9 +1640,10 @@ public class WebCallService extends Service {
 						// injecting local assets into http WebResourceResponse
 						if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
 						   path.indexOf("/user/notification.ogg")>=0 ||
+						   path.indexOf("/user/busy-signal.ogg")>=0 ||
 						   path.indexOf("/user/adapter-latest.js")>=0 ||
-						   path.indexOf("/callee/busy-signal.mp3")>=0 ||
-						   path.indexOf("/callee/1980-phone-ringing.mp3")>=0 ||		// TODO internally this is an OGG
+						   path.indexOf("/callee/busy-signal.ogg")>=0 ||
+						   path.indexOf("/callee/1980-phone-ringing.ogg")>=0 ||
 						   path.indexOf("/callee/adapter-latest.js")>=0 ||
 						   path.indexOf("/callee/phone.svg")>=0 ||
 						   path.indexOf("/callee/menu.svg")>=0 ||
@@ -4418,7 +4419,7 @@ public class WebCallService extends Service {
 							Log.d(TAG,"# reconnecter no pw cookie, abort");
 							statusMessage("No password cookie. Reconnector aborted.",-1,true,false);
 							reconnectBusy = false;
-// TODO tmtmtm turn tile off?
+							// TODO tmtmtm turn tile off?
 						}
 					}
 					if(!reconnectBusy) {
