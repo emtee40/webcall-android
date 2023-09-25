@@ -880,9 +880,13 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				Log.d(TAG,"onCreateContextMenu currentUrl="+webviewUrl+" touchY="+touchY);
 			}
 			if(webviewUrl.indexOf("/callee/")<0) {
-				if(extendedLogsFlag) {
+				//if(extendedLogsFlag) {
 					Log.d(TAG,"onCreateContextMenu user is not on mainpage");
-				}
+				//}
+			} else if(webviewUrl.indexOf("#")>0) {
+				//if(extendedLogsFlag) {
+					Log.d(TAG,"onCreateContextMenu user has iframe open");
+				//}
 			} else {
 				if(extendedLogsFlag) {
 					Log.d(TAG,"onCreateContextMenu user is on mainpage");
