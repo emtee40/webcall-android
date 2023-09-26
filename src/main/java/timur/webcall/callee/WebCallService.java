@@ -1789,7 +1789,6 @@ public class WebCallService extends Service {
 								// not one of the files in our local assets folder
 								String wvRequestMethod = wvRequest.getMethod();
 								Request.Builder requestBuilder;
-//								boolean had304before = false;
 								Response responseOK;
 
 								Log.d(TAG,"intercept "+wvRequestMethod+" ("+reqUrl+")"+
@@ -1887,8 +1886,10 @@ public class WebCallService extends Service {
 								InputStream is = responseOK.body().byteStream();
 								myResponseHeaders = responseHeadersOK.toMultimap();
 
-								if(path.indexOf("/rtcsig/")<0) {
-									// everytbing but /rtcsig
+								if(path.indexOf("/rtcsig/")>=0) {
+									myLocalFileMap.put(path, is);
+									response = new WebResourceResponse(mime, encoding, is);
+								} else {
 									myLocalMimeMap.put(path,mime);
 									//myLocalFileMap.put(path, is);
 									ByteArrayOutputStream buffer = new ByteArrayOutputStream();
@@ -1904,19 +1905,17 @@ public class WebCallService extends Service {
 										      " len="+contentLenString+
 										      " mime="+myLocalMimeMap.get(path)+
 										      " enc="+encoding);
-								} else {
-									myLocalFileMap.put(path, is);
-									response = new WebResourceResponse(mime, encoding, is);
+
+									myLocalEncodingMap.put(path,encoding);
+									if(contentLenString!=null) {
+										myLocalFileLenMap.put(path, Long.parseLong(contentLenString,10));
+									} else {
+										myLocalFileLenMap.put(path, 0l);
+									}
 								}
 
-								myLocalEncodingMap.put(path,encoding);
 								myLocalStatusMap.put(path,status);
 								myLocalStatusMsgMap.put(path,statusMsg);
-								if(contentLenString!=null) {
-									myLocalFileLenMap.put(path, Long.parseLong(contentLenString,10));
-								} else {
-									myLocalFileLenMap.put(path, 0l);
-								}
 								myLocalHeadersMap.put(path,myResponseHeaders);
 							}
 						}
@@ -1938,28 +1937,26 @@ public class WebCallService extends Service {
 
 							response = new WebResourceResponse(mime, encoding, new BufferedInputStream(is));
 //							response = new WebResourceResponse(mime, encoding, is);
-
-							myResponseHeaders = myLocalHeadersMap.get(path);
-
-							DateFormat df =
-								new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
-							df.setTimeZone(TimeZone.getTimeZone("GMT"));
-
-							Date date= new Date();
-							myResponseHeaders.put("date", Arrays.asList(df.format(date)));
-
-							status = myLocalStatusMap.get(path);
-							statusMsg = myLocalStatusMsgMap.get(path);
 						} else {
 							// /rtcsig pathes are not being cached, they are requested every time (with the needed header)
-							if(path.indexOf("/rtcsig/")<0) {
+							//if(path.indexOf("/rtcsig/")<0) {
 								Log.d(TAG,"intercept notcached path=("+path+")");
-							}
+							//}
 						}
 
+						myResponseHeaders = myLocalHeadersMap.get(path);
+
+						DateFormat df =
+							new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+						df.setTimeZone(TimeZone.getTimeZone("GMT"));
+						Date date= new Date();
+						myResponseHeaders.put("date", Arrays.asList(df.format(date)));
+
+						status = myLocalStatusMap.get(path);
+						statusMsg = myLocalStatusMsgMap.get(path);
+
 						if(logFlag) {
-							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
-									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") "); // + reqUrl);
+							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" ("+ mime+ ") ("+ encoding + ") ");
 							//Set<String> headerNamesSet = responseHeadersOK.names();
 							//for(String name : headerNamesSet) {
 							//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
