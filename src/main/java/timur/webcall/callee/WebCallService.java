@@ -142,7 +142,11 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.io.File;
+import java.io.InputStream;
+import java.io.FileInputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
@@ -151,6 +155,8 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.io.DataOutputStream;
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.lang.reflect.Method;
@@ -373,6 +379,19 @@ public class WebCallService extends Service {
 	private static volatile String postData = null;
 	private static volatile ServiceWorkerController serviceWorkerController = null;
 	private static volatile String contentSecurityPolicy = "";
+
+//	private static Map<String,FileInputStream> myLocalFileMap = new HashMap<String,FileInputStream>();
+	private static Map<String,InputStream> myLocalFileMap = new HashMap<String,InputStream>();
+	private static Map<String,Long> myLocalFileLenMap = new HashMap<String,Long>();
+	private static Map<String,String> myLocalMimeMap = new HashMap<String,String>();
+	private static Map<String,String> myLocalEncodingMap = new HashMap<String,String>();
+//	private static Map<String,Headers> myLocalHeadersMap = new HashMap<String,Headers>();
+	private static Map<String,Map<String,List<String>>> myLocalHeadersMap =
+		new HashMap<String,Map<String,List<String>>>();
+	private static Map<String,Integer> myLocalStatusMap = new HashMap<String,Integer>();
+	private static Map<String,String> myLocalStatusMsgMap = new HashMap<String,String>();
+	private static Map<String,byte[]> myLocalFileDataMap = new HashMap<String,byte[]>();
+
 
 	// section 1: android service methods
 	@Override
@@ -1541,7 +1560,8 @@ public class WebCallService extends Service {
 					boolean logFlag = extendedLogsFlag;
 
 					final String path = wvRequestUri.getPath();
-					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 && path.indexOf("/rtcsig")<0) {
+					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 &&
+							path.indexOf("/rtcsig")<0 && path.indexOf("favicon.ico")<0) {
 						//if(logFlag) {
 							Log.d(TAG,"intercept skip "+wvRequestUri);
 						//}
@@ -1574,6 +1594,7 @@ public class WebCallService extends Service {
 					}
 */
 
+					// injecting local assets into http WebResourceResponse
 					try {
 						OkHttpClient okClient;
 
@@ -1630,6 +1651,7 @@ public class WebCallService extends Service {
 						String contentType = "";
 						String mime = "";
 						String encoding = null;
+						String contentLenString = null;
 						Map<String,List<String>> myResponseHeaders = null;
 						WebResourceResponse response = null;
 
@@ -1637,96 +1659,141 @@ public class WebCallService extends Service {
 							logFlag = true;
 						}
 
-						// injecting local assets into http WebResourceResponse
-						if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
-						   path.indexOf("/user/notification.ogg")>=0 ||
-						   path.indexOf("/user/busy-signal.ogg")>=0 ||
-						   path.indexOf("/user/adapter-latest.js")>=0 ||
-						   path.indexOf("/callee/busy-signal.ogg")>=0 ||
-						   path.indexOf("/callee/1980-phone-ringing.ogg")>=0 ||
-						   path.indexOf("/callee/adapter-latest.js")>=0 ||
-						   path.indexOf("/callee/phone.svg")>=0 ||
-						   path.indexOf("/callee/menu.svg")>=0 ||
-						   path.indexOf("/callee/camera.svg")>=0 ||
-						   path.indexOf("/callee/contacts.svg")>=0 ||
-						   path.indexOf("/callee/dialpad.svg")>=0 ||
-						   path.indexOf("/callee/checkboxes.svg")>=0 ||
-						   path.indexOf("/user/camera.svg")>=0 ||
-						   path.indexOf("/user/menu.svg")>=0 ||
-						   path.indexOf("/user/phone.svg")>=0) {
+						String myMime = myLocalMimeMap.get(path);
+						if(myMime==null) {
+							// parh was not yet cached
+							if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
+							   path.indexOf("/user/notification.ogg")>=0 ||
+							   path.indexOf("/user/busy-signal.ogg")>=0 ||
+							   path.indexOf("/user/notification.ogg")>=0 ||
+							   path.indexOf("/user/adapter-latest.js")>=0 ||
+							   path.indexOf("/callee/busy-signal.ogg")>=0 ||
+							   path.indexOf("/callee/1980-phone-ringing.ogg")>=0 ||
+							   path.indexOf("/callee/adapter-latest.js")>=0 ||
+							   path.indexOf("/callee/phone.svg")>=0 ||
+							   path.indexOf("/callee/menu.svg")>=0 ||
+							   path.indexOf("/callee/camera.svg")>=0 ||
+							   path.indexOf("/callee/contacts.svg")>=0 ||
+							   path.indexOf("/callee/dialpad.svg")>=0 ||
+							   path.indexOf("/callee/checkboxes.svg")>=0 ||
+							   path.indexOf("/user/camera.svg")>=0 ||
+							   path.indexOf("/user/menu.svg")>=0 ||
+							   path.indexOf("/user/phone.svg")>=0 ||
+							   path.indexOf("favicon.ico")>=0) {
 
-							int idx = path.indexOf("/user/");
-							if(idx<0) idx = path.indexOf("/callee/");
-							String filename = path.substring(idx+1);
-							idx = filename.indexOf("?");
-							if(idx>=0) {
-								filename = filename.substring(0,idx);
+								String filename = path;
+								int idx = path.indexOf("/user/");
+								if(idx<0) idx = path.indexOf("/callee/");
+								if(idx<0) idx = path.indexOf("/");
+								if(idx>=0) filename = path.substring(idx+1);
+								idx = filename.indexOf("?");
+								if(idx>=0) {
+									filename = filename.substring(0,idx);
+								}
+								idx = filename.indexOf("#");
+								if(idx>=0) {
+									filename = filename.substring(0,idx);
+								}
+
+								if(filename.endsWith(".mp3")) {
+									contentType = "audio/mpeg";
+									mime = contentType;
+								} else if(filename.endsWith(".ogg")) {
+									contentType = "audio/ogg";
+									mime = contentType;
+								} else if(filename.endsWith(".js")) {
+									contentType = "text/javascript";
+									mime = contentType;
+									encoding = "utf-8";
+								} else if(filename.endsWith(".svg")) {
+									contentType = "image/svg+xml";
+									mime = contentType;
+									encoding = "utf-8";
+								} else if(filename.endsWith(".ico")) {
+									contentType = "image/x-icon";
+									mime = contentType;
+								}
+
+								Log.d(TAG,"intercept filename=("+filename+") path=" + path);
+
+	//							FileInputStream fis = myLocalFileMap.get(filename);
+	//							InputStream fis = myLocalFileMap.get(filename);
+//								InputStream fis = myLocalFileMap.get(path);
+//								if(fis==null) {
+									idx = filename.indexOf(".");
+									String ext = filename.substring(idx);
+									String filenameNoExt = filename.substring(0,idx);
+									filenameNoExt = filenameNoExt.replace("/","_");
+
+									AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
+
+//								File outputDir = context.getCacheDir(); // context being the Activity pointer
+//								String outPath = outputDir.getAbsolutePath();
+//								Log.d(TAG,"intercept filenameNoExt=("+filenameNoExt+") ext=" + ext+ " outPath="+outPath);
+//								File outputFile = File.createTempFile(filenameNoExt, ext, outputDir);
+//								InputStream is = fileDescriptor.createInputStream();
+//								Files.copy(is, outputDir.toPath(),
+//									StandardCopyOption.REPLACE_EXISTING);
+//	//								StandardCopyOption.COPY_ATTRIBUTES);
+//	//								StandardCopyOption.NOFOLLOW_LINKS);
+
+									InputStream is = fileDescriptor.createInputStream();
+									myLocalFileMap.put(path,is);
+									myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
+									myLocalMimeMap.put(path,mime);
+									myLocalEncodingMap.put(path,encoding);
+//								}
+
+
+//								response = new WebResourceResponse(mime, encoding, new BufferedInputStream(is));
+//								long contentLength = fileDescriptor.getLength();
+								long contentLength = myLocalFileLenMap.get(path);
+								contentLenString = ""+contentLength;
+								Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
+//									" contentSecurityPolicy="+contentSecurityPolicy);
+
+								myResponseHeaders = new HashMap<String,List<String>>();
+								myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
+								myResponseHeaders.put("content-type", Arrays.asList(mime));
+								myResponseHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
+
+								DateFormat df =
+									new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+								df.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+								Date date= new Date();
+								myResponseHeaders.put("date", Arrays.asList(df.format(date)));
+
+								Date dateModified = new Date();
+								dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
+								myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
+
+								Date dateExpires = new Date();
+								dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
+								myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
+
+								myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
+								myResponseHeaders.put("Content-Range",
+									Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
+								// TODO set user-agent?
+
+								myLocalHeadersMap.put(path,myResponseHeaders);
+
+								status = 200;
+								statusMsg = "OK";
+								myLocalStatusMap.put(path,status);
+								myLocalStatusMsgMap.put(path,statusMsg);
 							}
-							idx = filename.indexOf("#");
-							if(idx>=0) {
-								filename = filename.substring(0,idx);
-							}
 
-							if(filename.endsWith(".mp3")) {
-								contentType = "audio/mpeg";
-								mime = contentType;
-							} else if(filename.endsWith(".ogg")) {
-								contentType = "audio/ogg";
-								mime = contentType;
-							} else if(filename.endsWith(".js")) {
-								contentType = "text/javascript";
-								mime = contentType;
-								encoding = "utf-8";
-							} else if(filename.endsWith(".svg")) {
-								contentType = "image/svg+xml";
-								mime = contentType;
-								encoding = "utf-8";
-							}
+							if(status==0) {
+								// not one of the files in our local assets folder
+								String wvRequestMethod = wvRequest.getMethod();
+								Request.Builder requestBuilder;
+//								boolean had304before = false;
+								Response responseOK;
 
-							AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
-							response = new WebResourceResponse(mime, encoding,
-								new BufferedInputStream(fileDescriptor.createInputStream()));
-							long contentLength = fileDescriptor.getLength();
-							Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
-//								" contentSecurityPolicy="+contentSecurityPolicy);
-
-							myResponseHeaders = new HashMap<String,List<String>>();
-							myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
-							myResponseHeaders.put("content-type", Arrays.asList(mime));
-							myResponseHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
-
-							DateFormat df = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
-							df.setTimeZone(TimeZone.getTimeZone("GMT"));
-
-							Date date= new Date();
-							myResponseHeaders.put("date", Arrays.asList(df.format(date)));
-
-							Date dateModified = new Date();
-							dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
-							myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
-
-							Date dateExpires = new Date();
-							dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
-							myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
-
-							myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
-							myResponseHeaders.put("Content-Range",
-								Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
-							// TODO set user-agent?
-
-							status = 200;
-							statusMsg = "OK";
-						}
-
-						if(status==0) {
-							String wvRequestMethod = wvRequest.getMethod();
-							Request.Builder requestBuilder;
-							boolean had304before = false;
-							Response responseOK;
-
-							do {
 								Log.d(TAG,"intercept "+wvRequestMethod+" ("+reqUrl+")"+
-										" curUrl="+currentUrl+" ("+webcallCookie+")");
+										  " curUrl="+currentUrl+" ("+webcallCookie+")");
 								requestBuilder = new Request.Builder();
 								requestBuilder.url(reqUrl);
 
@@ -1748,8 +1815,6 @@ public class WebCallService extends Service {
 								// preventing 304 in the 1st place:
 								requestHeaders.remove("If-Modified-Since");
 								requestHeaders.remove("If-None-Match");
-								// preventing 206 in the 1st place:
-								//requestHeaders.remove("Range");
 
 								if(myWebView!=null) {
 									CookieManager.getInstance().setAcceptCookie(true);
@@ -1772,7 +1837,7 @@ public class WebCallService extends Service {
 									}
 								}
 
-								if(logFlag || had304before) {
+								if(logFlag /*|| had304before*/) {
 									// show all request headers
 									for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
 										Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+reqUrl);
@@ -1781,82 +1846,120 @@ public class WebCallService extends Service {
 
 								requestBuilder.headers(Headers.of(requestHeaders));
 								Request requestOK = requestBuilder.build();
-
-								// now send the request
 								responseOK = okClient.newCall(requestOK).execute();
+								/////////////////////// request has been sent ////////////////////////
 
+
+
+								//////////////////////////////////////////////////////////////////////
 								status = responseOK.code();
 								if(status>=300 && status<400) {
-// webview has the requested content in its cache
-// it has sent a If-Modified-Since header to the server and the server is responding with 304
-// this means the content has not been modified
-// but we can't tell webview this
-
-									if(had304before) {
-										// fatal
-										Log.d(TAG,"# intercept "+status+" had304before, no reloop url="+reqUrl);
-										break;
-									}
-
-									// show all request headers
-									for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
-										Log.d(TAG,"reqHdr2: "+entry.getKey() + "/" + entry.getValue()+" "+reqUrl);
-									}
-									if(reqUrl.indexOf("?")>=0) {
-										reqUrl += "&__=" + (new Date().getTime());
-									} else {
-										reqUrl += "?__=" + (new Date().getTime());
-									}
-									requestHeaders.remove("If-Modified-Since");
-									requestHeaders.remove("If-None-Match");
-									Log.d(TAG,"! intercept "+status+" reloop url="+reqUrl);
-									had304before = true;
-								}
-							}
-							while(status>=300 && status<400);
-
-							if(status>=300 && status<400) {
-								if(had304before) {
 									// fatal
+									Log.d(TAG,"# intercept "+status+" url="+reqUrl);
 									return null;
 								}
+
+								statusMsg = responseOK.message();
+								if(statusMsg==null || statusMsg=="") {
+									statusMsg = "OK";
+								}
+
+								//ResponseBody responseBodyOK = responseOK.body();
+								Headers responseHeadersOK = responseOK.headers();
+								contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
+								contentLenString = responseHeadersOK.get("content-length");
+
+								//String contentType = responseBodyOK.contentType().toString();
+								mime = contentType;
+								if(mime!=null) {
+									int idxSemicolon = mime.indexOf(";");
+									if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
+								}
+
+								encoding = responseHeadersOK.get("content-encoding");
+								if(contentType!=null &&
+										//(responseBodyOK.contentType().type().equals("text") ||
+										(contentType.startsWith("text") ||
+										 contentType.equals("image/svg+xml"))) {
+									encoding = "utf-8";
+								}
+
+								InputStream is = responseOK.body().byteStream();
+								myResponseHeaders = responseHeadersOK.toMultimap();
+
+								if(path.indexOf("/rtcsig/")<0) {
+									// everytbing but /rtcsig
+									myLocalMimeMap.put(path,mime);
+									//myLocalFileMap.put(path, is);
+									ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+									int nRead;
+									byte[] data = new byte[1024];
+									while((nRead = is.read(data, 0, data.length)) != -1) {
+										buffer.write(data, 0, nRead);
+									}
+									buffer.flush();
+									myLocalFileDataMap.put(path,buffer.toByteArray());
+
+									Log.d(TAG,"intercept store path=("+path+")"+
+										      " len="+contentLenString+
+										      " mime="+myLocalMimeMap.get(path)+
+										      " enc="+encoding);
+								} else {
+									myLocalFileMap.put(path, is);
+									response = new WebResourceResponse(mime, encoding, is);
+								}
+
+								myLocalEncodingMap.put(path,encoding);
+								myLocalStatusMap.put(path,status);
+								myLocalStatusMsgMap.put(path,statusMsg);
+								if(contentLenString!=null) {
+									myLocalFileLenMap.put(path, Long.parseLong(contentLenString,10));
+								} else {
+									myLocalFileLenMap.put(path, 0l);
+								}
+								myLocalHeadersMap.put(path,myResponseHeaders);
+							}
+						}
+
+						myMime = myLocalMimeMap.get(path);
+						if(myMime!=null) {
+							// parh is cached
+							mime = myMime;
+							encoding = myLocalEncodingMap.get(path);
+
+							InputStream is = myLocalFileMap.get(path);
+							if(is==null) {
+								is = new ByteArrayInputStream(myLocalFileDataMap.get(path));
 							}
 
-							statusMsg = responseOK.message();
-							if(statusMsg==null || statusMsg=="") {
-								statusMsg = "OK";
+							long contentLength = myLocalFileLenMap.get(path);
+							Log.d(TAG,"intercept load path=("+path+") len="+contentLength+
+									  " mime="+mime+" enc="+encoding);
+
+							response = new WebResourceResponse(mime, encoding, new BufferedInputStream(is));
+//							response = new WebResourceResponse(mime, encoding, is);
+
+							myResponseHeaders = myLocalHeadersMap.get(path);
+
+							DateFormat df =
+								new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+							df.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+							Date date= new Date();
+							myResponseHeaders.put("date", Arrays.asList(df.format(date)));
+
+							status = myLocalStatusMap.get(path);
+							statusMsg = myLocalStatusMsgMap.get(path);
+						} else {
+							// /rtcsig pathes are not being cached, they are requested every time (with the needed header)
+							if(path.indexOf("/rtcsig/")<0) {
+								Log.d(TAG,"intercept notcached path=("+path+")");
 							}
-
-
-							//ResponseBody responseBodyOK = responseOK.body();
-							Headers responseHeadersOK = responseOK.headers();
-							contentType = responseHeadersOK.get("content-type"); // "text/plain; charset=utf-8"
-
-							//String contentType = responseBodyOK.contentType().toString();
-							mime = contentType;
-							if(mime!=null) {
-								int idxSemicolon = mime.indexOf(";");
-								if(idxSemicolon>=0) mime = mime.substring(0,idxSemicolon);
-							}
-
-							encoding = responseHeadersOK.get("content-encoding");
-//							if(encoding==null) {
-//								encoding = "utf-8";
-//							} else
-							if(contentType!=null &&
-									//(responseBodyOK.contentType().type().equals("text") ||
-									(contentType.startsWith("text") ||
-									 contentType.equals("image/svg+xml"))) {
-								encoding = "utf-8";
-							}
-
-							response = new WebResourceResponse(mime, encoding, responseOK.body().byteStream());
-							myResponseHeaders = responseHeadersOK.toMultimap();
 						}
 
 						if(logFlag) {
 							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" "+
-									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") " + reqUrl);
+									"("+ contentType+ ") ("+ mime+ ") ("+ encoding + ") "); // + reqUrl);
 							//Set<String> headerNamesSet = responseHeadersOK.names();
 							//for(String name : headerNamesSet) {
 							//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
@@ -1869,9 +1972,12 @@ public class WebCallService extends Service {
 							String key = entry.getKey();
 							// the first list entry seems to contain the complete balue
 							String value = entry.getValue().get(0);
-							if(logFlag) {
-								Log.d(TAG,"respHdr: "+key + " (" + value +") "+reqUrl);
-							}
+
+//							if(logFlag) {
+//							if(key==null || !key.equals("content-security-policy")) {
+//								Log.d(TAG,"respHdr: "+key + " (" + value +") "+reqUrl);
+//							}
+
 							if(key!=null && key!="" && value!=null && value!="") {
 								if(key.equals("Set-Cookie") || key.equals("set-cookie")) {
 									if(value!="") {
@@ -1892,44 +1998,6 @@ public class WebCallService extends Service {
 							responseHeaders.put(key,value);
 						}
 						response.setResponseHeaders(responseHeaders);
-
-
-
-/* this doesn't work
-   we also must prevent fall through with return null
-   bc this would cause a fetch without x-wcver set (causing the wrong file to me fetched potentially)
-
-						if(status<300 || status>=400) {
-							response.setStatusCodeAndReasonPhrase(status,statusMsg);
-						} else {
-							// statusCode can't be in the [300, 399] range
-							Log.d(TAG,"! intercept status="+status+" msg="+statusMsg+" special handling");
-							try {
-								java.lang.reflect.Field f = WebResourceResponse.class.getDeclaredField("mStatusCode");
-								if(f!=null) {
-									f.setAccessible(true);
-									f.setInt(response, status);
-									try {
-										java.lang.reflect.Field f2 =
-											WebResourceResponse.class.getDeclaredField("mReasonPhrase");
-										if(f2!=null) {
-											f2.setAccessible(true);
-											f2.set(response, statusMsg);
-										} else {
-											Log.d(TAG,"# intercept reflect mReasonPhrase not found");
-										}
-									} catch(Exception ex2) {
-										Log.d(TAG, "# intercept "+url+" Exception="+ex2);
-									}
-								} else {
-									Log.d(TAG,"# intercept reflect mStatusCode not found");
-								}
-							} catch(Exception ex) {
-								Log.d(TAG, "# intercept "+url.toString()+" Exception="+ex);
-							}
-						}
-*/
-
 						response.setStatusCodeAndReasonPhrase(status,statusMsg);
 						//responseBodyOK.close();
 						//responseOK.close();
@@ -2070,7 +2138,10 @@ public class WebCallService extends Service {
 //						}
 */
 					} catch(Exception ex) {
-						Log.d(TAG, "# intercept "+wvRequestUri+" Exception="+ex);
+						Log.d(TAG, "# intercept "+wvRequestUri+
+//									" line="+(Thread.currentThread().getStackTrace()[2].getLineNumber())+
+									" Ex="+ex);
+						ex.printStackTrace();
 					}
 					//return null to tell WebView we failed to fetch it WebView should try again.
 					return null;
@@ -2956,6 +3027,16 @@ public class WebCallService extends Service {
 					@Override
 					public void run() {
 						myWebView.clearCache(true);
+
+						myLocalFileMap = new HashMap<String,InputStream>();
+						myLocalFileLenMap = new HashMap<String,Long>();
+						myLocalMimeMap = new HashMap<String,String>();
+						myLocalEncodingMap = new HashMap<String,String>();
+						myLocalHeadersMap = new HashMap<String,Map<String,List<String>>>();
+						myLocalStatusMap = new HashMap<String,Integer>();
+						myLocalStatusMsgMap = new HashMap<String,String>();
+						myLocalFileDataMap = new HashMap<String,byte[]>();
+
 						Log.d(TAG,"JS wsClearCache clearCache() done");
 						if(autoreload) {
 							// immediate execution of reload() will NOT execute JS code
