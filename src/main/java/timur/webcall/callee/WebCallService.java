@@ -380,12 +380,10 @@ public class WebCallService extends Service {
 	private static volatile ServiceWorkerController serviceWorkerController = null;
 	private static volatile String contentSecurityPolicy = "";
 
-//	private static Map<String,FileInputStream> myLocalFileMap = new HashMap<String,FileInputStream>();
 	private static Map<String,InputStream> myLocalFileMap = new HashMap<String,InputStream>();
 	private static Map<String,Long> myLocalFileLenMap = new HashMap<String,Long>();
 	private static Map<String,String> myLocalMimeMap = new HashMap<String,String>();
 	private static Map<String,String> myLocalEncodingMap = new HashMap<String,String>();
-//	private static Map<String,Headers> myLocalHeadersMap = new HashMap<String,Headers>();
 	private static Map<String,Map<String,List<String>>> myLocalHeadersMap =
 		new HashMap<String,Map<String,List<String>>>();
 	private static Map<String,Integer> myLocalStatusMap = new HashMap<String,Integer>();
@@ -1567,32 +1565,6 @@ public class WebCallService extends Service {
 						//}
 						return null;
 					}
-/*
-					if(path.indexOf("/rtcsig/online")>=0) {
-						//if(logFlag) {
-							Log.d(TAG,"intercept skip "+wvRequestUri);
-						//}
-						return null;
-					}
-*/
-
-/*
-					if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-						if(serviceWorkerController==null) {
-							serviceWorkerController = ServiceWorkerController.getInstance();
-							serviceWorkerController.setServiceWorkerClient(new ServiceWorkerClient(){
-								//@Nullable
-								@Override
-								public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
-									if(logFlag) {
-										Log.d(TAG,"worker shouldInterceptRequest "+wvRequest.getUrl());
-									}
-									return super.shouldInterceptRequest(request);
-								}
-							});
-						}
-					}
-*/
 
 					// injecting local assets into http WebResourceResponse
 					try {
@@ -1655,13 +1627,9 @@ public class WebCallService extends Service {
 						Map<String,List<String>> myResponseHeaders = null;
 						WebResourceResponse response = null;
 
-						if(path.indexOf(".mp3")>=0 || path.indexOf(".ogg")>=0) {
-							logFlag = true;
-						}
-
 						String myMime = myLocalMimeMap.get(path);
 						if(myMime==null) {
-							// parh was not yet cached
+							// this path was not yet cached
 							if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
 							   path.indexOf("/user/notification.ogg")>=0 ||
 							   path.indexOf("/user/busy-signal.ogg")>=0 ||
@@ -1716,41 +1684,35 @@ public class WebCallService extends Service {
 
 								Log.d(TAG,"intercept filename=("+filename+") path=" + path);
 
-	//							FileInputStream fis = myLocalFileMap.get(filename);
-	//							InputStream fis = myLocalFileMap.get(filename);
-//								InputStream fis = myLocalFileMap.get(path);
-//								if(fis==null) {
-									idx = filename.indexOf(".");
-									String ext = filename.substring(idx);
-									String filenameNoExt = filename.substring(0,idx);
-									filenameNoExt = filenameNoExt.replace("/","_");
+								idx = filename.indexOf(".");
+								String ext = filename.substring(idx);
+								String filenameNoExt = filename.substring(0,idx);
+								filenameNoExt = filenameNoExt.replace("/","_");
 
-									AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
+								AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
+								InputStream is = fileDescriptor.createInputStream();
+								myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
+								myLocalMimeMap.put(path,mime);
+								myLocalEncodingMap.put(path,encoding);
+								// for single use; must be fetched from AssetFileDescriptor again next time
+								//myLocalFileMap.put(path,is);
 
-//								File outputDir = context.getCacheDir(); // context being the Activity pointer
-//								String outPath = outputDir.getAbsolutePath();
-//								Log.d(TAG,"intercept filenameNoExt=("+filenameNoExt+") ext=" + ext+ " outPath="+outPath);
-//								File outputFile = File.createTempFile(filenameNoExt, ext, outputDir);
-//								InputStream is = fileDescriptor.createInputStream();
-//								Files.copy(is, outputDir.toPath(),
-//									StandardCopyOption.REPLACE_EXISTING);
-//	//								StandardCopyOption.COPY_ATTRIBUTES);
-//	//								StandardCopyOption.NOFOLLOW_LINKS);
-
-									InputStream is = fileDescriptor.createInputStream();
-									myLocalFileMap.put(path,is);
-									myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
-									myLocalMimeMap.put(path,mime);
-									myLocalEncodingMap.put(path,encoding);
-//								}
+								// permanently cached in myLocalFileDataMap
+								ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+								int nRead;
+								byte[] data = new byte[4*1024];
+								while((nRead = is.read(data, 0, data.length)) != -1) {
+									buffer.write(data, 0, nRead);
+								}
+								buffer.flush();
+								myLocalFileDataMap.put(path,buffer.toByteArray());
+								myLocalFileMap.remove(path);
+								is.close();
 
 
-//								response = new WebResourceResponse(mime, encoding, new BufferedInputStream(is));
-//								long contentLength = fileDescriptor.getLength();
 								long contentLength = myLocalFileLenMap.get(path);
 								contentLenString = ""+contentLength;
-								Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
-//									" contentSecurityPolicy="+contentSecurityPolicy);
+								//Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
 
 								myResponseHeaders = new HashMap<String,List<String>>();
 								myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
@@ -1786,12 +1748,15 @@ public class WebCallService extends Service {
 							}
 
 							if(status==0) {
-								// not one of the files in our local assets folder
+								// this path was not previously cached
+								// this path does also not reference one of the files in our local assets folder
+								// probably a request for a html or js file, or a /rtcsig request
+								// we need to send a http request and fetch (and possinly cache) the response
 								String wvRequestMethod = wvRequest.getMethod();
 								Request.Builder requestBuilder;
 								Response responseOK;
 
-								Log.d(TAG,"intercept "+wvRequestMethod+" ("+reqUrl+")"+
+								Log.d(TAG,"intercept fetch "+wvRequestMethod+" ("+reqUrl+")"+
 										  " curUrl="+currentUrl+" ("+webcallCookie+")");
 								requestBuilder = new Request.Builder();
 								requestBuilder.url(reqUrl);
@@ -1811,7 +1776,7 @@ public class WebCallService extends Service {
 								Map<String,String> requestHeaders = wvRequest.getRequestHeaders();
 								requestHeaders.put("X-WcVer", BuildConfig.VERSION_NAME);
 								requestHeaders.put("X-WvVer", getWebviewVersion());
-								// preventing 304 in the 1st place:
+								// we need to prevent 304's:
 								requestHeaders.remove("If-Modified-Since");
 								requestHeaders.remove("If-None-Match");
 
@@ -1836,7 +1801,7 @@ public class WebCallService extends Service {
 									}
 								}
 
-								if(logFlag /*|| had304before*/) {
+								if(logFlag) {
 									// show all request headers
 									for(Map.Entry<String,String> entry : requestHeaders.entrySet()) {
 										Log.d(TAG,"reqHdr: "+entry.getKey() + "/" + entry.getValue()+" "+reqUrl);
@@ -1884,24 +1849,32 @@ public class WebCallService extends Service {
 								}
 
 								InputStream is = responseOK.body().byteStream();
-								myResponseHeaders = responseHeadersOK.toMultimap();
+								//myResponseHeaders = responseHeadersOK.toMultimap();
 
 								if(path.indexOf("/rtcsig/")>=0) {
+									// /rtcsig/ requests will not be cached
 									myLocalFileMap.put(path, is);
+									myLocalMimeMap.remove(path); // making sure this will be requested again next time
+									//Log.d(TAG,"intercept no-cache path=("+path+")"+
+									//	      " len="+contentLenString+
+									//	      " mime="+mime+
+									//	      " enc="+encoding);
 									response = new WebResourceResponse(mime, encoding, is);
 								} else {
+									// files from /callee and /user will be cached in myLocalFileDataMap
 									myLocalMimeMap.put(path,mime);
-									//myLocalFileMap.put(path, is);
+
 									ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 									int nRead;
-									byte[] data = new byte[1024];
+									byte[] data = new byte[4*1024];
 									while((nRead = is.read(data, 0, data.length)) != -1) {
 										buffer.write(data, 0, nRead);
 									}
 									buffer.flush();
 									myLocalFileDataMap.put(path,buffer.toByteArray());
+									myLocalFileMap.remove(path);
 
-									Log.d(TAG,"intercept store path=("+path+")"+
+									Log.d(TAG,"intercept cache path=("+path+")"+
 										      " len="+contentLenString+
 										      " mime="+myLocalMimeMap.get(path)+
 										      " enc="+encoding);
@@ -1914,29 +1887,38 @@ public class WebCallService extends Service {
 									}
 								}
 
+//								myLocalHeadersMap.put(path,myResponseHeaders);
+								myLocalHeadersMap.put(path,responseHeadersOK.toMultimap());
 								myLocalStatusMap.put(path,status);
 								myLocalStatusMsgMap.put(path,statusMsg);
-								myLocalHeadersMap.put(path,myResponseHeaders);
+								// end of NOT cache abd NOT from local assets folder
 							}
+
+							// end of was cached
 						}
 
 						myMime = myLocalMimeMap.get(path);
 						if(myMime!=null) {
-							// parh is cached
+							// content for this path has been cached before
+							long contentLength = myLocalFileLenMap.get(path);
 							mime = myMime;
 							encoding = myLocalEncodingMap.get(path);
-
-							InputStream is = myLocalFileMap.get(path);
-							if(is==null) {
-								is = new ByteArrayInputStream(myLocalFileDataMap.get(path));
-							}
-
-							long contentLength = myLocalFileLenMap.get(path);
 							Log.d(TAG,"intercept load path=("+path+") len="+contentLength+
 									  " mime="+mime+" enc="+encoding);
 
-							response = new WebResourceResponse(mime, encoding, new BufferedInputStream(is));
-//							response = new WebResourceResponse(mime, encoding, is);
+							InputStream is = myLocalFileMap.get(path);
+							if(is!=null) {
+								// is = stream to file in our asset folder (good for one fetch)
+								//Log.d(TAG,"intercept store stream ("+(is!=null)+")");
+								is = new BufferedInputStream(is);
+								myLocalFileMap.remove(path); // good for one use only
+							} else {
+								// myLocalFileDataMap.get(path) = ByteArray of our cached content
+								is = new ByteArrayInputStream(myLocalFileDataMap.get(path));
+								//Log.d(TAG,"intercept store bytearray ("+(is!=null)+")");
+							}
+
+							response = new WebResourceResponse(mime, encoding, is);
 						} else {
 							// /rtcsig pathes are not being cached, they are requested every time (with the needed header)
 							//if(path.indexOf("/rtcsig/")<0) {
@@ -1952,15 +1934,23 @@ public class WebCallService extends Service {
 						Date date= new Date();
 						myResponseHeaders.put("date", Arrays.asList(df.format(date)));
 
+						Date dateModified = new Date();
+						dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
+						myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
+
+						Date dateExpires = new Date();
+						dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
+						myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
+
 						status = myLocalStatusMap.get(path);
 						statusMsg = myLocalStatusMsgMap.get(path);
 
-						if(logFlag) {
+						if(logFlag || myMime!=null) {
 							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" ("+ mime+ ") ("+ encoding + ") ");
-							//Set<String> headerNamesSet = responseHeadersOK.names();
-							//for(String name : headerNamesSet) {
-							//	Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
-							//}
+//							Set<String> headerNamesSet = responseHeadersOK.names();
+//							for(String name : headerNamesSet) {
+//								Log.d(TAG, "headerOK "+name + " " + responseHeadersOK.get(name));
+//							}
 						}
 
 						/////// build response header
@@ -1970,10 +1960,11 @@ public class WebCallService extends Service {
 							// the first list entry seems to contain the complete balue
 							String value = entry.getValue().get(0);
 
-//							if(logFlag) {
-//							if(key==null || !key.equals("content-security-policy")) {
-//								Log.d(TAG,"respHdr: "+key + " (" + value +") "+reqUrl);
-//							}
+							if(logFlag /*|| myMime!=null*/) {
+								if(key==null || !key.equals("content-security-policy")) {
+									Log.d(TAG,"respHdr: "+key + " (" + value +") "+reqUrl);
+								}
+							}
 
 							if(key!=null && key!="" && value!=null && value!="") {
 								if(key.equals("Set-Cookie") || key.equals("set-cookie")) {
