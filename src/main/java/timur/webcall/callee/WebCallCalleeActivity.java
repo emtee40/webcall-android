@@ -875,6 +875,7 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 			final int none = ContextMenu.NONE;
 			// for the context menu to be shown, our service must be connected to webcall server
 			// and our webview url must contain "/callee/"
+
 			String webviewUrl = webCallServiceBinder.getCurrentUrl();
 			if(extendedLogsFlag) {
 				Log.d(TAG,"onCreateContextMenu currentUrl="+webviewUrl+" touchY="+touchY);
@@ -883,11 +884,15 @@ public class WebCallCalleeActivity extends Activity implements CreateNdefMessage
 				//if(extendedLogsFlag) {
 					Log.d(TAG,"onCreateContextMenu user is not on mainpage");
 				//}
-			} else if(webviewUrl.indexOf("#")>0) {
+			} else 
+/*
+			if(webviewUrl.indexOf("#")>0) {
 				//if(extendedLogsFlag) {
 					Log.d(TAG,"onCreateContextMenu user has iframe open");
 				//}
-			} else {
+			} else 
+*/
+			{
 				if(extendedLogsFlag) {
 					Log.d(TAG,"onCreateContextMenu user is on mainpage");
 				}
