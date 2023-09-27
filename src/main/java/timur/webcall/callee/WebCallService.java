@@ -625,40 +625,50 @@ public class WebCallService extends Service {
 					return;
 				}
 
-				message = intent.getStringExtra("showCall");
-				if(message!=null && message!="") {
-					// user responded to the call-notification dialog by switching to activity
-					// this intent is coming from the started activity
-					if(myWebView!=null && webviewMainPageLoaded) {
-						if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-							// kickstart processWebRtcMessages()
-							Log.d(TAG, "serviceCmdReceiver showCall -> processWebRtcMessages "+message);
-							processWebRtcMessages();
-						}
-					}
-					return;
-				}
-
 				message = intent.getStringExtra("acceptCall");
 				if(message!=null && message!="") {
 					// user responded to the 3-button call-notification dialog by accepting the call
 					// this intent is coming from the started activity
 					if(myWebView!=null && webviewMainPageLoaded) {
+						if(currentUrl!=null && currentUrl.indexOf("#")>=0) {
+							Log.d(TAG, "serviceCmdReceiver close iframe");
+							runJS("history.back()",null);
+							// TODO what if multiple iframes are open
+						}
 						// autoPickup now
-						if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-							Log.d(TAG, "serviceCmdReceiver processWebRtcMessages() + autoPickup on rtcConnect");
-							processWebRtcMessages();
-							stopRinging("serviceCmdReceiver acceptCall");
-							autoPickup = true;
-						} else {
+//						if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+//							Log.d(TAG, "serviceCmdReceiver processWebRtcMessages() + autoPickup on rtcConnect");
+//							processWebRtcMessages();
+//							stopRinging("serviceCmdReceiver acceptCall");
+//							autoPickup = true; // evaluated by JS rtcConnect()
+//						} else {
 							Log.d(TAG, "serviceCmdReceiver auto-pickup() now");
 							runJS("pickup()",null);
-						}
+//						}
 					} else {
 						// autoPickup when we get connected as callee
 						// if the next connect fails, we must reset this flag
 						Log.d(TAG, "serviceCmdReceiver autoPickup delayed");
 						autoPickup = true;
+					}
+					return;
+				}
+
+				message = intent.getStringExtra("showCall");
+				if(message!=null && message!="") {
+					// user responded to the call-notification dialog by switching to activity
+					// this intent is coming from the started activity
+					if(myWebView!=null && webviewMainPageLoaded) {
+						if(currentUrl!=null && currentUrl.indexOf("#")>=0) {
+							Log.d(TAG, "serviceCmdReceiver close iframe");
+							runJS("history.back()",null);
+							// TODO what if multiple iframes are open
+						}
+						if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+							// kickstart processWebRtcMessages()
+							Log.d(TAG, "serviceCmdReceiver showCall -> processWebRtcMessages "+message);
+							processWebRtcMessages();
+						}
 					}
 					return;
 				}
@@ -2666,7 +2676,7 @@ public class WebCallService extends Service {
 			// clear peerConnectFlag + callPickedUpFlag, cancel(NOTIF_ID2), stopRinging
 			endPeerCon();
 
-			autoPickup = false;		// ???
+			autoPickup = false; // set by serviceCmdReceiver "acceptCall"
 
 			if(audioManager!=null) {
 				if(audioManager.isWiredHeadsetOn()) {
@@ -3566,8 +3576,9 @@ public class WebCallService extends Service {
 
 				if(context==null) {
 					Log.e(TAG,"# onMessage incoming call: "+contentText+", no context to wake activity");
-				} else if(activityVisible) {
-					Log.d(TAG,"onMessage incoming call: "+contentText+", activityVisible (do nothing)");
+				} else if(activityVisible && myWebView!=null && webviewMainPageLoaded &&
+							(currentUrl==null || currentUrl.indexOf("#")<0)) {
+					Log.d(TAG,"onMessage incoming call: "+contentText+", activityVisible on mainpage (do nothing)");
 				} else {
 					incomingCall(callerID,callerName,txtMsg,false);
 					startRinging();
