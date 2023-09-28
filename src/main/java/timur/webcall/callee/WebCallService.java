@@ -641,6 +641,7 @@ public class WebCallService extends Service {
 //							processWebRtcMessages();
 //							stopRinging("serviceCmdReceiver acceptCall");
 //							autoPickup = true; // evaluated by JS rtcConnect()
+//                          // TODO autoPickup comes too late, rtcConnect may have already take place
 //						} else {
 							Log.d(TAG, "serviceCmdReceiver auto-pickup() now");
 							runJS("pickup()",null);
@@ -1766,8 +1767,8 @@ public class WebCallService extends Service {
 								Request.Builder requestBuilder;
 								Response responseOK;
 
-								Log.d(TAG,"intercept fetch "+wvRequestMethod+" ("+reqUrl+")"+
-										  " curUrl="+currentUrl+" ("+webcallCookie+")");
+								Log.d(TAG,"intercept fetch "+wvRequestMethod+" ("+reqUrl+")");
+								//		  " curUrl="+currentUrl+" ("+webcallCookie+")");
 								requestBuilder = new Request.Builder();
 								requestBuilder.url(reqUrl);
 
@@ -1932,7 +1933,7 @@ public class WebCallService extends Service {
 						} else {
 							// /rtcsig pathes are not being cached, they are requested every time (with the needed header)
 							//if(path.indexOf("/rtcsig/")<0) {
-								Log.d(TAG,"intercept notcached path=("+path+")");
+							//	Log.d(TAG,"intercept notcached path=("+path+")");
 							//}
 						}
 
@@ -1955,7 +1956,7 @@ public class WebCallService extends Service {
 						status = myLocalStatusMap.get(path);
 						statusMsg = myLocalStatusMsgMap.get(path);
 
-						if(logFlag || myMime!=null) {
+						if(logFlag || status!=200) {
 							Log.d(TAG,"intercept "+status+" repMsg="+statusMsg+" ("+ mime+ ") ("+ encoding + ") ");
 //							Set<String> headerNamesSet = responseHeadersOK.names();
 //							for(String name : headerNamesSet) {
@@ -5863,7 +5864,6 @@ public class WebCallService extends Service {
 			new NotificationCompat.Builder(context, NOTIF_HIGH)
 				.setSmallIcon(R.mipmap.notification_icon)
 				.setContentTitle("WebCall incoming")
-				.setOngoing(true)
 				.setCategory(NotificationCompat.CATEGORY_CALL)
 				.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 				//.setLights(0xff00ff00, 300, 100)	// does not seem to work on N7
@@ -5900,6 +5900,15 @@ public class WebCallService extends Service {
 						PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE), true)
 
 				.setContentText(contentText);
+
+		if(activityVisible && myWebView!=null && webviewMainPageLoaded &&
+				currentUrl!=null && currentUrl.indexOf("#")>=0) {
+			Log.d(TAG,"incomingCall: notification can be swiped");
+		} else {
+			Log.d(TAG,"incomingCall: notification can not be swiped");
+			notificationBuilder.setOngoing(true);
+		}
+
 
 		Notification notification = notificationBuilder.build();
 		notificationManager.notify(NOTIF_ID2, notification);
