@@ -1638,131 +1638,133 @@ public class WebCallService extends Service {
 						Map<String,List<String>> myResponseHeaders = null;
 						WebResourceResponse response = null;
 
-						String myMime = myLocalMimeMap.get(path);
-						if(myMime==null) {
-							// this path was not yet cached
-							if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
-							   path.indexOf("/user/notification.ogg")>=0 ||
-							   path.indexOf("/user/busy-signal.ogg")>=0 ||
-							   path.indexOf("/user/notification.ogg")>=0 ||
-							   path.indexOf("/user/adapter-latest.js")>=0 ||
-							   path.indexOf("/callee/busy-signal.ogg")>=0 ||
-							   path.indexOf("/callee/1980-phone-ringing.ogg")>=0 ||
-							   path.indexOf("/callee/adapter-latest.js")>=0 ||
-							   path.indexOf("/callee/phone.svg")>=0 ||
-							   path.indexOf("/callee/menu.svg")>=0 ||
-							   path.indexOf("/callee/camera.svg")>=0 ||
-							   path.indexOf("/callee/contacts.svg")>=0 ||
-							   path.indexOf("/callee/dialpad.svg")>=0 ||
-							   path.indexOf("/callee/checkboxes.svg")>=0 ||
-							   path.indexOf("/user/camera.svg")>=0 ||
-							   path.indexOf("/user/menu.svg")>=0 ||
-							   path.indexOf("/user/phone.svg")>=0) {
-							   //path.indexOf("favicon.ico")>=0) {
+						// this path was not yet cached
+						if(path.indexOf("/user/dtmf-dial.ogg")>=0 ||
+						   path.indexOf("/user/notification.ogg")>=0 ||
+						   path.indexOf("/user/busy-signal.ogg")>=0 ||
+						   path.indexOf("/user/notification.ogg")>=0 ||
+						   path.indexOf("/user/adapter-latest.js")>=0 ||
+						   path.indexOf("/callee/busy-signal.ogg")>=0 ||
+						   path.indexOf("/callee/1980-phone-ringing.ogg")>=0 ||
+						   path.indexOf("/callee/adapter-latest.js")>=0 ||
+						   path.indexOf("/callee/phone.svg")>=0 ||
+						   path.indexOf("/callee/menu.svg")>=0 ||
+						   path.indexOf("/callee/camera.svg")>=0 ||
+						   path.indexOf("/callee/contacts.svg")>=0 ||
+						   path.indexOf("/callee/dialpad.svg")>=0 ||
+						   path.indexOf("/callee/checkboxes.svg")>=0 ||
+						   path.indexOf("/user/camera.svg")>=0 ||
+						   path.indexOf("/user/menu.svg")>=0 ||
+						   path.indexOf("/user/phone.svg")>=0) {
+						   //path.indexOf("favicon.ico")>=0) {
 
-								String filename = path;
-								int idx = path.indexOf("/user/");
-								if(idx<0) idx = path.indexOf("/callee/");
-								if(idx<0) idx = path.indexOf("/");
-								if(idx>=0) filename = path.substring(idx+1);
-								idx = filename.indexOf("?");
-								if(idx>=0) {
-									filename = filename.substring(0,idx);
-								}
-								idx = filename.indexOf("#");
-								if(idx>=0) {
-									filename = filename.substring(0,idx);
-								}
-
-								if(filename.endsWith(".mp3")) {
-									contentType = "audio/mpeg";
-									mime = contentType;
-								} else if(filename.endsWith(".ogg")) {
-									contentType = "audio/ogg";
-									mime = contentType;
-								} else if(filename.endsWith(".js")) {
-									contentType = "text/javascript";
-									mime = contentType;
-									encoding = "utf-8";
-								} else if(filename.endsWith(".svg")) {
-									contentType = "image/svg+xml";
-									mime = contentType;
-									encoding = "utf-8";
-								} else if(filename.endsWith(".ico")) {
-									contentType = "image/x-icon";
-									mime = contentType;
-								}
-
-								Log.d(TAG,"intercept filename=("+filename+") path=" + path);
-
-								idx = filename.indexOf(".");
-								String ext = filename.substring(idx);
-								String filenameNoExt = filename.substring(0,idx);
-								filenameNoExt = filenameNoExt.replace("/","_");
-
-								// TODO Ex=java.io.FileNotFoundException
-								AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
-								InputStream is = fileDescriptor.createInputStream();
-								myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
-								myLocalMimeMap.put(path,mime);
-								myLocalEncodingMap.put(path,encoding);
-								// for single use; must be fetched from AssetFileDescriptor again next time
-								//myLocalFileMap.put(path,is);
-
-								// permanently cached in myLocalFileDataMap
-								ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-								int nRead;
-								byte[] data = new byte[4*1024];
-								while((nRead = is.read(data, 0, data.length)) != -1) {
-									buffer.write(data, 0, nRead);
-								}
-								buffer.flush();
-								myLocalFileDataMap.put(path,buffer.toByteArray());
-								myLocalFileMap.remove(path);
-								is.close();
-
-
-								long contentLength = myLocalFileLenMap.get(path);
-								contentLenString = ""+contentLength;
-								//Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
-
-								myResponseHeaders = new HashMap<String,List<String>>();
-								myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
-								myResponseHeaders.put("content-type", Arrays.asList(mime));
-								myResponseHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
-
-								DateFormat df =
-									new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
-								df.setTimeZone(TimeZone.getTimeZone("GMT"));
-
-								Date date= new Date();
-								myResponseHeaders.put("date", Arrays.asList(df.format(date)));
-
-								Date dateModified = new Date();
-								dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
-								myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
-
-								Date dateExpires = new Date();
-								dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
-								myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
-
-								myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
-								myResponseHeaders.put("Content-Range",
-									Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
-
-								myLocalHeadersMap.put(path,myResponseHeaders);
-
-								status = 200;
-								statusMsg = "OK";
-								myLocalStatusMap.put(path,status);
-								myLocalStatusMsgMap.put(path,statusMsg);
+							String filename = path;
+							int idx = path.indexOf("/user/");
+							if(idx<0) idx = path.indexOf("/callee/");
+							if(idx<0) idx = path.indexOf("/");
+							if(idx>=0) filename = path.substring(idx+1);
+							idx = filename.indexOf("?");
+							if(idx>=0) {
+								filename = filename.substring(0,idx);
+							}
+							idx = filename.indexOf("#");
+							if(idx>=0) {
+								filename = filename.substring(0,idx);
 							}
 
+							if(filename.endsWith(".mp3")) {
+								contentType = "audio/mpeg";
+								mime = contentType;
+							} else if(filename.endsWith(".ogg")) {
+								contentType = "audio/ogg";
+								mime = contentType;
+							} else if(filename.endsWith(".js")) {
+								contentType = "text/javascript";
+								mime = contentType;
+								encoding = "utf-8";
+							} else if(filename.endsWith(".svg")) {
+								contentType = "image/svg+xml";
+								mime = contentType;
+								encoding = "utf-8";
+							} else if(filename.endsWith(".ico")) {
+								contentType = "image/x-icon";
+								mime = contentType;
+							}
+
+							Log.d(TAG,"intercept filename=("+filename+") path=" + path);
+
+							idx = filename.indexOf(".");
+							String ext = filename.substring(idx);
+							String filenameNoExt = filename.substring(0,idx);
+							filenameNoExt = filenameNoExt.replace("/","_");
+
+							// TODO Ex=java.io.FileNotFoundException
+							AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
+							InputStream is = fileDescriptor.createInputStream();
+							myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
+							myLocalMimeMap.put(path,mime);
+							myLocalEncodingMap.put(path,encoding);
+							// for single use; must be fetched from AssetFileDescriptor again next time
+							myLocalFileMap.put(path,is);
+							/*
+							// permanently cached in myLocalFileDataMap
+							ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+							int nRead;
+							byte[] data = new byte[4*1024];
+							while((nRead = is.read(data, 0, data.length)) != -1) {
+								buffer.write(data, 0, nRead);
+							}
+							buffer.flush();
+							myLocalFileDataMap.put(path,buffer.toByteArray());
+							myLocalFileMap.remove(path);
+							is.close();
+							*/
+
+							long contentLength = myLocalFileLenMap.get(path);
+							contentLenString = ""+contentLength;
+							//Log.d(TAG,"intercept local filename=("+filename+") len=" + contentLength);
+
+							myResponseHeaders = new HashMap<String,List<String>>();
+							myResponseHeaders.put("content-length", Arrays.asList(""+contentLength));
+							myResponseHeaders.put("content-type", Arrays.asList(mime));
+							myResponseHeaders.put("content-security-policy", Arrays.asList(contentSecurityPolicy));
+
+							DateFormat df =
+								new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US);
+							df.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+							Date date= new Date();
+							myResponseHeaders.put("date", Arrays.asList(df.format(date)));
+
+							Date dateModified = new Date();
+							dateModified.setTime(date.getTime() - (6*60*60*1000));	// - 6 * 1hr
+							myResponseHeaders.put("last-modified", Arrays.asList(df.format(dateModified)));
+
+							Date dateExpires = new Date();
+							dateExpires.setTime(date.getTime() + (6*60*60*1000));	// 6 * 1hr
+							myResponseHeaders.put("expires", Arrays.asList(df.format(dateExpires)));
+
+							myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
+							myResponseHeaders.put("Content-Range",
+								Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
+
+							myLocalHeadersMap.put(path,myResponseHeaders);
+
+							status = 200;
+							statusMsg = "OK";
+							myLocalStatusMap.put(path,status);
+							myLocalStatusMsgMap.put(path,statusMsg);
+						}
+
+						String myMime = myLocalMimeMap.get(path);
+						if(myMime==null) {
+							// path was not cached before
 							if(status==0) {
-								// this path was not previously cached
-								// this path does also not reference one of the files in our local assets folder
-								// probably a request for a html or js file, or a /rtcsig request
-								// we need to send a http request and fetch (and possinly cache) the response
+								// path is also not a file in the local assets folder
+
+								// probably a request for a html or js file (will be fetched a cached)
+								// or a /rtcsig request (will only be fetched, but not cached)
+								// when we fetch the request here, we add our special http request headers
 								String wvRequestMethod = wvRequest.getMethod();
 								Request.Builder requestBuilder;
 								Response responseOK;
@@ -1904,7 +1906,7 @@ public class WebCallService extends Service {
 									}
 								}
 
-//								myLocalHeadersMap.put(path,myResponseHeaders);
+								//myLocalHeadersMap.put(path,myResponseHeaders);
 								myLocalHeadersMap.put(path,responseHeadersOK.toMultimap());
 								myLocalStatusMap.put(path,status);
 								myLocalStatusMsgMap.put(path,statusMsg);
