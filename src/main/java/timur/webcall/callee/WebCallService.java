@@ -4426,7 +4426,7 @@ public class WebCallService extends Service {
 					return;
 				}
 
-				if(currentUrl.equals("file:///android_asset/index.html")) {
+				if(currentUrl!=null && currentUrl.equals("file:///android_asset/index.html")) {
 					Log.d(TAG,"! reconnecter stopped, user on basepage wsClient="+(wsClient!=null));
 					// we need to prevent the reconnector to start in the bg while user sits on the base page
 					// reconnector was probably started from tile
