@@ -1570,7 +1570,7 @@ public class WebCallService extends Service {
 
 					final String path = wvRequestUri.getPath();
 					if(path.indexOf("/callee/")<0 && path.indexOf("/user/")<0 &&
-							path.indexOf("/rtcsig")<0 && path.indexOf("favicon.ico")<0) {
+							path.indexOf("/rtcsig")<0 /*&& path.indexOf("favicon.ico")<0*/) {
 						//if(logFlag) {
 							Log.d(TAG,"intercept skip "+wvRequestUri);
 						//}
@@ -1657,8 +1657,8 @@ public class WebCallService extends Service {
 							   path.indexOf("/callee/checkboxes.svg")>=0 ||
 							   path.indexOf("/user/camera.svg")>=0 ||
 							   path.indexOf("/user/menu.svg")>=0 ||
-							   path.indexOf("/user/phone.svg")>=0 ||
-							   path.indexOf("favicon.ico")>=0) {
+							   path.indexOf("/user/phone.svg")>=0) {
+//							   path.indexOf("favicon.ico")>=0) {
 
 								String filename = path;
 								int idx = path.indexOf("/user/");
@@ -3355,6 +3355,7 @@ public class WebCallService extends Service {
 				// normal disconnect: shut down connection - do NOT reconnect
 				Log.d(TAG,"onClose code=1000");
 				wsClient = null;
+/*
 				if(reconnectSchedFuture==null) {
 					// if wsClient was closed by onDestroy, networkStateReceiver will be null
 					if(networkStateReceiver!=null) {
@@ -3373,6 +3374,7 @@ public class WebCallService extends Service {
 					//});
 					runJS("offlineAction();",null);
 				}
+*/
 			} else {
 				Log.d(TAG,"onClose code="+code+" reason="+reason);
 
