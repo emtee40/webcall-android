@@ -6046,7 +6046,7 @@ public class WebCallService extends Service {
 			}
 		} else {
 			// gained network
-			if(!connectToServerIsWanted || reconnectBusy) {
+			if(!connectToServerIsWanted /*|| reconnectBusy*/) {
 				if(newNetworkInt>0 && newNetworkInt!=oldNetworkInt) {
 					if(newNetworkInt==2) {
 						Log.d(TAG,"networkChange gained Wifi");
@@ -6059,11 +6059,11 @@ public class WebCallService extends Service {
 						statusMessage("Network ready",-1,true,false);
 					}
 				}
-				if(!connectToServerIsWanted) {
+				//if(!connectToServerIsWanted) {
 					Log.d(TAG,"networkChange abort conWant==false");
-				} else if(reconnectBusy) {
-					Log.d(TAG,"networkChange abort reconnectBusy");
-				}
+				//} else if(reconnectBusy) {
+				//	Log.d(TAG,"networkChange abort reconnectBusy");
+				//}
 			} else {
 				// start reconnecter (independent of whether we have a network or not)
 				Log.d(TAG,"networkChange start...");
