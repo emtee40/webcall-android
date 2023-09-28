@@ -4362,9 +4362,9 @@ public class WebCallService extends Service {
 				}
 				*/
 				reconnectBusy = true;
+				reconnectCounter++;
 				Log.d(TAG,"reconnecter start "+reconnectCounter+" net="+haveNetworkInt+" "+
 					currentDateTimeString()+" wsClient="+(wsClient!=null));
-				reconnectCounter++;
 
 				if(haveNetworkInt<=0) {
 					// we have no network: it makes no sense to try to reconnect any longer
@@ -4440,6 +4440,7 @@ public class WebCallService extends Service {
 					return;
 				}
 
+				Log.d(TAG,"reconnecter construct setLoginUrl...");
 				setLoginUrl();
 				Log.d(TAG,"reconnecter login "+loginUrl+" wsClient="+(wsClient!=null));
 				statusMessage("Login "+loginUserName,-1,true,false);
