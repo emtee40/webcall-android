@@ -1658,7 +1658,7 @@ public class WebCallService extends Service {
 							   path.indexOf("/user/camera.svg")>=0 ||
 							   path.indexOf("/user/menu.svg")>=0 ||
 							   path.indexOf("/user/phone.svg")>=0) {
-//							   path.indexOf("favicon.ico")>=0) {
+							   //path.indexOf("favicon.ico")>=0) {
 
 								String filename = path;
 								int idx = path.indexOf("/user/");
@@ -1700,6 +1700,7 @@ public class WebCallService extends Service {
 								String filenameNoExt = filename.substring(0,idx);
 								filenameNoExt = filenameNoExt.replace("/","_");
 
+								// TODO Ex=java.io.FileNotFoundException
 								AssetFileDescriptor fileDescriptor = getAssets().openFd(filename);
 								InputStream is = fileDescriptor.createInputStream();
 								myLocalFileLenMap.put(path,new Long(fileDescriptor.getLength()));
@@ -1748,7 +1749,6 @@ public class WebCallService extends Service {
 								myResponseHeaders.put("Accept-Ranges", Arrays.asList("bytes"));
 								myResponseHeaders.put("Content-Range",
 									Arrays.asList("bytes 0-"+(contentLength-1)+"/"+contentLength));
-								// TODO set user-agent?
 
 								myLocalHeadersMap.put(path,myResponseHeaders);
 
@@ -1790,6 +1790,12 @@ public class WebCallService extends Service {
 								// we need to prevent 304's:
 								requestHeaders.remove("If-Modified-Since");
 								requestHeaders.remove("If-None-Match");
+
+								if(requestHeaders.get("user-agent")=="") {
+									if(userAgentString!=null && userAgentString!="") {
+										requestHeaders.put("user-agent", userAgentString);
+									}
+								}
 
 								if(myWebView!=null) {
 									CookieManager.getInstance().setAcceptCookie(true);
@@ -1991,6 +1997,10 @@ public class WebCallService extends Service {
 									}
 								} else if(key.equals("content-security-policy")) {
 									contentSecurityPolicy = value;
+								} else if(key.equals("user-agent")) {
+									if(userAgentString!=null && userAgentString!="") {
+										userAgentString = value;
+									}
 								}
 							}
 
