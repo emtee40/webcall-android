@@ -3372,7 +3372,7 @@ public class WebCallService extends Service {
 				// normal disconnect: shut down connection - do NOT reconnect
 				Log.d(TAG,"onClose code=1000");
 				wsClient = null;
-/*
+				// tmtmtm2
 				if(reconnectSchedFuture==null) {
 					// if wsClient was closed by onDestroy, networkStateReceiver will be null
 					if(networkStateReceiver!=null) {
@@ -3391,7 +3391,6 @@ public class WebCallService extends Service {
 					//});
 					runJS("offlineAction();",null);
 				}
-*/
 			} else {
 				Log.d(TAG,"onClose code="+code+" reason="+reason);
 
@@ -6066,7 +6065,8 @@ public class WebCallService extends Service {
 			}
 		} else {
 			// gained network
-			if(!connectToServerIsWanted /*|| reconnectBusy*/) {
+			// tmtmtm1
+			if(!connectToServerIsWanted || reconnectBusy) {
 				if(newNetworkInt>0 && newNetworkInt!=oldNetworkInt) {
 					if(newNetworkInt==2) {
 						Log.d(TAG,"networkChange gained Wifi");
@@ -6079,11 +6079,11 @@ public class WebCallService extends Service {
 						statusMessage("Network ready",-1,true,false);
 					}
 				}
-				//if(!connectToServerIsWanted) {
+				if(!connectToServerIsWanted) {
 					Log.d(TAG,"networkChange abort conWant==false");
-				//} else if(reconnectBusy) {
-				//	Log.d(TAG,"networkChange abort reconnectBusy");
-				//}
+				} else if(reconnectBusy) {
+					Log.d(TAG,"networkChange abort reconnectBusy");
+				}
 			} else {
 				// start reconnecter (independent of whether we have a network or not)
 				Log.d(TAG,"networkChange start...");
