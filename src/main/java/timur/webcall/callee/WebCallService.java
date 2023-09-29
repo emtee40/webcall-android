@@ -484,7 +484,7 @@ public class WebCallService extends Service {
 
 		// turn tile off
 		postStatus("state", "deactivated");
-		currentUrl = "";
+		currentUrl = null;
 		serviceDestroyed = true;
 		Log.d(TAG, "onDestroy done");
 	}
@@ -504,6 +504,7 @@ public class WebCallService extends Service {
 		closeWebView("onTaskRemoved");
 		activityVisible = false;
 		activityTerminated = true;
+		currentUrl = null;
 		System.gc();
 		if(wsClient==null && !connectToServerIsWanted && activityTerminated && !peerConnectFlag && !callPickedUpFlag) {
 			Log.d(TAG,"JS onTaskRemoved(), wsClient==null + serverNotWanted + activityKilled -> exitService()");
@@ -1799,7 +1800,7 @@ public class WebCallService extends Service {
 									}
 								}
 
-								if(myWebView!=null) {
+								if(myWebView!=null && currentUrl!=null) {
 									CookieManager.getInstance().setAcceptCookie(true);
 									if(webcallCookie==null || webcallCookie=="") {
 										//Log.d(TAG,"intercept CookieManager..getCookie("+currentUrl+")...");
@@ -1991,7 +1992,7 @@ public class WebCallService extends Service {
 										webcallCookie = value;
 										Log.d(TAG,"intercept storePrefs cookie="+webcallCookie);
 										storePrefsString("cookies", webcallCookie);
-										if(myWebView!=null) {
+										if(myWebView!=null && currentUrl!=null) {
 											Log.d(TAG,"intercept setCookie currentUrl="+currentUrl);
 											CookieManager.getInstance().setAcceptCookie(true);
 											CookieManager.getInstance().setCookie(currentUrl,webcallCookie);
@@ -2197,10 +2198,12 @@ public class WebCallService extends Service {
 					currentUrl = url.replace("?auto=1","");
 					Log.d(TAG, "onPageFinished currentUrl=" + currentUrl);
 					//webviewMainPageLoaded = false;
-					webcallCookie = CookieManager.getInstance().getCookie(currentUrl);
-					Log.d(TAG, "onPageFinished webcallCookie=" + webcallCookie);
-					if(webcallCookie!=null && webcallCookie!="") {
-						storePrefsString("cookies", webcallCookie);
+					if(currentUrl!=null) {
+						webcallCookie = CookieManager.getInstance().getCookie(currentUrl);
+						Log.d(TAG, "onPageFinished webcallCookie=" + webcallCookie);
+						if(webcallCookie!=null && webcallCookie!="") {
+							storePrefsString("cookies", webcallCookie);
+						}
 					}
 
 					// TODO tmtmtm auch "/callee/mastodon" excluden?
@@ -3077,6 +3080,8 @@ public class WebCallService extends Service {
 		public void reload(boolean autoconnect) {
 			if(myWebView==null) {
 				Log.d(TAG,"# JS reload("+currentUrl+") myWebView==null");
+			} else if(currentUrl==null) {
+				Log.d(TAG,"# JS reload() currentUrl==null, myWebView not null");
 			} else {
 				// get rid of #... in currentUrl
 				String baseCurrentUrl = currentUrl;
