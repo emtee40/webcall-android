@@ -1,12 +1,14 @@
 WebCall for Android 1.4.11
 on WebCall 4.0
-- Full User-Defined IDs
+
+- Fully User-Defined IDs
 - New Call Screen
 - Waiting Callers + Handover
 - Pickup, Reject, Hangup, Mute from Notification
 - New Quick Setting Tile
 - P2P TextChat
 - P2P File Transfer
-- Can disconnect from Server while in call
+- Receive Calls 24/7
+- Disconnect from Server while in P2P call
 - Ultra Low Power Consumption
 

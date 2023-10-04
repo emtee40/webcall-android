@@ -4,39 +4,20 @@
 
 # WebCall for Android
 
-WebCall for Android offers the following features on top of the core WebCall package:
+WebCall for Android is a P2P Telephony and Video-Telephony application based on WebRTC:
 
-- NFC Connect
-- Ring on speaker
-- Receiving calls while in deep sleep
-- Automatic use of ear piece if available
-- Proximity sensor to turn off backlight
-- Low battery consumption
-
-WebCall for Android offers all WebRTC 1.0 based audio/video telephony features as provided by the core WebCall client. This includes low latency E2E-encrypted P2P communications and very high audio quality using the Opus codec (two-way 20-280kbp/s). Find out more about [Core WebCall.](https://github.com/mehrvarz/webcall/)
-
-
-When you run the WebCall client, anybody on the Web can give you a call. Your callers only need to know your personal WebCall link (your WebCall "phone number").
-
-### NFC Connect
-
-NFC Connect lets you establish phone calls by touching two devices. Once connected the two parties can split and walk away, while continuing the call. The other device does not require any special software. It only needs internet (mobile or wifi), NFC and a 2020+ web browser. If both devices are connected to the same Wifi network, the call will establish directly over Wifi.
-
-### Ring on Speaker
-
-WebCall for Android can play back the ringtone on the loud speaker, even if you have a headset connected. If you intend to use a headset, this feature can simplify picking up calls a lot.
-
-### Receiving calls while in sleep mode
-
-WebCall for Android lets you receive calls while your device is in deep sleep mode. This is something the Web client does not support. It makes the Android client a much better solution for all day operations.
-
-### Low power requirements
-
-WebCall for Android has very moderate power requirements. It can run in the background all day in order to receive calls at any time. Unlike a regular phone application, it does not require a SIM card.
-
-## More info + APK Download
-
-You can use WebCall for Android as your only phone software (say, on your Wifi-only Android tablet) or as a companion phone solution. Find more info about [WebCall for Android on timur.mobi.](https://timur.mobi/webcall/android)
+- Fully User-Defined IDs
+- New Call Screen
+- Waiting Callers + Handover
+- Pickup, Reject, Hangup, Mute from Notification
+- New Quick Setting Tile
+- P2P TextChat
+- P2P File Transfer
+- Receive Calls 24/7
+- Very High Audio Quality 300kbps in both directions
+- Disconnect from Server while in P2P call
+- Ultra Low Power Consumption
+- Works well on Tablets
 
 [<img src="get-it-on-fdroid.png"
      alt="Get it on F-Droid"
@@ -46,7 +27,7 @@ Or search for "webcall" inside the F-Droid app.
 
 ## Building the APK
 
-You need Java 11, Gradle 7.3.3 and the Android SDK.
+Required: Java 11, Gradle 7.3.3, Android SDK
 
 Create a local.properties file and make it point to your Android SDK:
 
@@ -55,18 +36,20 @@ sdk.dir=/home/username/bin/android-sdk...
 ```
 Build the APK without signing it:
 
-In build.gradle, outcomment the "signingConfig" commands:
+In build.gradle, outcomment the "signingConfig" lines:
 
 ```
-buildTypes {
-    release {
-        minifyEnabled false
-        //signingConfig signingConfigs.release
-    }
-    debug {
-        minifyEnabled false
-        //signingConfig signingConfigs.debug
-    }
+android {
+	buildTypes {
+	    release {
+	        minifyEnabled false
+	        //signingConfig signingConfigs.release
+	    }
+	    debug {
+	        minifyEnabled false
+	        //signingConfig signingConfigs.debug
+	    }
+}
 ```
 
 Run gradle build:
@@ -89,12 +72,12 @@ GPL3.0 - see: [LICENSE](LICENSE)
 ### 3rd party code
 
 - github.com/TooTallNate/Java-WebSocket, MIT license
+- com.squareup.okhttp3, Apache License, Version 2.0
 
-### 3rd party icons
+### 3rd party graphics, icons
 
 - Uri Herrera, KDE Visual Design, GNU Lesser General Public
 - Timothy Miller, Public domain
 - BadPiggies, Creative Commons Attribution-Share Alike 4.0
-
 
 
