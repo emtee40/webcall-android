@@ -1,8 +1,0 @@
-Now permiting clipboard paste on password form field.
-
-No speakermode by proximity sensor if headset connected.
-
-Serializing concurrent network-change events.
-
-Added missing "Online. Waiting for calls." notification msg.
-
